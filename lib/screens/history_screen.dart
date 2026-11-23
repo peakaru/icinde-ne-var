@@ -27,6 +27,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<void> _load() async {
     final hist = await DatabaseService.getHistory();
     final lang = await DatabaseService.getSetting('lang') ?? 'tr';
+    if (!mounted) return;
     setState(() { _history = hist; _lang = lang; });
   }
 
@@ -272,7 +273,9 @@ class _HistoryTileState extends State<_HistoryTile> {
   @override
   void initState() {
     super.initState();
-    DatabaseService.isFavorite(widget.product.barcode).then((v) => setState(() => _isFav = v));
+    DatabaseService.isFavorite(widget.product.barcode).then((v) {
+      if (mounted) setState(() => _isFav = v);
+    });
   }
 
   @override

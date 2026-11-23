@@ -40,7 +40,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   Future<void> _analyzeImage(String path) async {
-    final result = await _controller.analyzeImage(path);
+    BarcodeCapture? result;
+    try {
+      result = await _controller.analyzeImage(path);
+    } catch (e) {
+      // Desteklenmeyen/bozuk görsel: "bulunamadı" akışına düş, ekran
+      // sonsuza kadar "Barkod aranıyor..."da kalmasın
+      debugPrint('analyzeImage hatası: $e');
+    }
     if (!mounted) return;
     if (result != null && result.barcodes.isNotEmpty) {
       final barcode = result.barcodes.first.rawValue;

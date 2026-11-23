@@ -24,6 +24,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   Future<void> _load() async {
     final favs = await DatabaseService.getFavorites();
     final lang = await DatabaseService.getSetting('lang') ?? 'tr';
+    if (!mounted) return;
     setState(() { _favorites = favs; _lang = lang; });
   }
 

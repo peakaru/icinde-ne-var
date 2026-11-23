@@ -27,6 +27,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   List<SearchResult> _searchResults = [];
   bool _searching = false;
   Timer? _searchDebounce;
+  // Her aramada artar; geç dönen eski bir yanıt yenisinin üstüne yazılmasın
+  int _searchSeq = 0;
 
   late AnimationController _pulseController;
 
@@ -61,7 +63,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     // Sadece rakam → barkod modu, arama sonuçlarını temizle
     if (v.isEmpty || RegExp(r'^\d+$').hasMatch(v)) {
-      if (mounted) setState(() => _searchResults = []);
+      _searchSeq++; // yoldaki arama yanıtı artık geçersiz
+      if (mounted) setState(() { _searchResults = []; _searching = false; });
       return;
     }
 
@@ -73,12 +76,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _runSearch(String query) async {
+    final seq = ++_searchSeq;
+    bool isCurrent() => mounted && seq == _searchSeq;
     if (mounted) setState(() => _searching = true);
     try {
       final results = await SearchService.search(query, limit: 8);
-      if (mounted) setState(() => _searchResults = results);
+      if (isCurrent()) setState(() => _searchResults = results);
     } on RateLimitException {
-      if (mounted) {
+      if (mounted && seq == _searchSeq) {
         setState(() => _searchResults = []);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
@@ -92,14 +97,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ));
       }
     } catch (_) {
-      if (mounted) setState(() => _searchResults = []);
+      if (isCurrent()) setState(() => _searchResults = []);
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (isCurrent()) setState(() => _searching = false);
     }
   }
 
   /// Arama sonucuna tıklayınca: barkodla tam lookup → detay ekranı
   Future<void> _openSearchResult(SearchResult r) async {
+    if (_loading) return; // çift dokunuş iki detay ekranı açmasın
     if (mounted) setState(() => _loading = true);
     try {
       final result = await LookupService.lookup(r.barcode);
@@ -127,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _lookupBarcode(String barcode, {String? imagePath}) async {
-    if (barcode.isEmpty) return;
+    if (barcode.isEmpty || _loading) return; // çift dokunuş iki sorgu başlatmasın
     setState(() => _loading = true);
     try {
       final result = await LookupService.lookup(barcode);
@@ -215,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _pickFromGallery() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return;
+    if (image == null || !mounted) return;
     final barcode = await Navigator.push<String>(context,
         MaterialPageRoute(builder: (_) => ScannerScreen(imagePath: image.path)));
     if (barcode != null) _lookupBarcode(barcode, imagePath: image.path);

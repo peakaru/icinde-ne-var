@@ -50,7 +50,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     PackageInfo.fromPlatform().then((info) {
       if (mounted) setState(() => _version = info.version);
     });
-    DatabaseService.getSetting('lang').then((v) => setState(() => _lang = v ?? 'tr'));
+    DatabaseService.getSetting('lang').then((v) {
+      if (mounted) setState(() => _lang = v ?? 'tr');
+    });
     _loadAllergens();
   }
 
@@ -77,7 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _setLang(String lang) async {
     await DatabaseService.setSetting('lang', lang);
-    setState(() => _lang = lang);
+    if (mounted) setState(() => _lang = lang);
   }
 
   @override

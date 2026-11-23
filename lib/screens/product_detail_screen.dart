@@ -70,8 +70,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     } else {
       await DatabaseService.addFavorite(widget.product);
     }
-    setState(() => _isFav = !_isFav);
     if (!mounted) return;
+    setState(() => _isFav = !_isFav);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(_isFav
           ? (_lang == 'tr' ? 'Favorilere eklendi' : 'Added to favorites')
