@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/product.dart';
@@ -68,8 +69,9 @@ class DatabaseService {
     );
   }
 
-  // Ürünü JSON'a çevir (tam veri)
-  static String _toJson(Product p) => jsonEncode({
+  // Ürünü JSON'a çevir (tam veri) — Product.fromJson ile birebir geri okunabilmeli
+  @visibleForTesting
+  static String productToJson(Product p) => jsonEncode({
     'barcode': p.barcode,
     'product_name': p.productName,
     'brand': p.brand,
@@ -89,11 +91,14 @@ class DatabaseService {
     },
     'found_risks': p.foundRisks?.map((r) => {
       'name': r.name,
+      'name_en': r.nameEn,
       'ewg_score': r.ewgScore,
       'risk': r.risk,
+      'risk_en': r.riskEn,
       'evidence': r.evidence,
       'color': r.color,
       'source': r.source,
+      'source_en': r.sourceEn,
     }).toList(),
     'allergens': p.allergens,
     'all_ingredients': p.allIngredients,
@@ -135,7 +140,7 @@ class DatabaseService {
         'product_name': p.productName,
         'brand': p.brand,
         'nutriscore_grade': p.nutriscoreGrade,
-        'product_json': _toJson(p),
+        'product_json': productToJson(p),
         'date_added': DateTime.now().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -168,7 +173,7 @@ class DatabaseService {
       'product_name': p.productName,
       'brand': p.brand,
       'nutriscore_grade': p.nutriscoreGrade,
-      'product_json': _toJson(p),
+      'product_json': productToJson(p),
       'scan_date': DateTime.now().toIso8601String(),
     });
     // Max 30 kayıt
@@ -216,7 +221,7 @@ class DatabaseService {
       'cached_products',
       {
         'barcode': p.barcode,
-        'data_json': _toJson(p),
+        'data_json': productToJson(p),
         'cached_date': DateTime.now().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
