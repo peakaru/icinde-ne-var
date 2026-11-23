@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../models/allergens.dart';
 import '../services/database_service.dart';
 import 'home_screen.dart';
 import 'legal_screen.dart';
@@ -19,32 +20,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String _lang = 'tr';
   Set<String> _selectedAllergens = {};
 
-  // settings_screen ile aynı liste (backend alerjen key'leri)
-  static const Map<String, String> _allergenTr = {
-    'süt': '🥛 Süt / Laktoz',
-    'gluten': '🌾 Gluten',
-    'yumurta': '🥚 Yumurta',
-    'soya': '🫘 Soya',
-    'kuruyemiş': '🥜 Kuruyemiş',
-    'balık': '🐟 Balık',
-    'susam': '🍯 Susam',
-    'hardal': '🌭 Hardal',
-    'kereviz': '🥬 Kereviz',
-    'sülfit': '🍷 Sülfit',
-  };
-  static const Map<String, String> _allergenEn = {
-    'süt': '🥛 Milk / Lactose',
-    'gluten': '🌾 Gluten',
-    'yumurta': '🥚 Egg',
-    'soya': '🫘 Soy',
-    'kuruyemiş': '🥜 Nuts',
-    'balık': '🐟 Fish',
-    'susam': '🍯 Sesame',
-    'hardal': '🌭 Mustard',
-    'kereviz': '🥬 Celery',
-    'sülfit': '🍷 Sulphites',
-  };
-  Map<String, String> get _allergenLabels => _isTr ? _allergenTr : _allergenEn;
+  Map<String, String> get _allergenLabels => Allergens.labels(_lang);
 
   bool get _isTr => _lang == 'tr';
 

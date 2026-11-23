@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'legal_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../models/allergens.dart';
 import '../services/database_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -14,33 +15,8 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   String _lang = 'tr';
   String _version = '';
+  Map<String, String> get _allergenLabels => Allergens.labels(_lang);
   // Kullanıcının seçili alerjenleri (backend alerjen key'leriyle eşleşir)
-  static const Map<String, String> _allergenLabelsTr = {
-    'süt': '🥛 Süt / Laktoz',
-    'gluten': '🌾 Gluten',
-    'yumurta': '🥚 Yumurta',
-    'soya': '🫘 Soya',
-    'kuruyemiş': '🥜 Kuruyemiş',
-    'balık': '🐟 Balık',
-    'susam': '🍯 Susam',
-    'hardal': '🌭 Hardal',
-    'kereviz': '🥬 Kereviz',
-    'sülfit': '🍷 Sülfit',
-  };
-  static const Map<String, String> _allergenLabelsEn = {
-    'süt': '🥛 Milk / Lactose',
-    'gluten': '🌾 Gluten',
-    'yumurta': '🥚 Egg',
-    'soya': '🫘 Soy',
-    'kuruyemiş': '🥜 Nuts',
-    'balık': '🐟 Fish',
-    'susam': '🍯 Sesame',
-    'hardal': '🌭 Mustard',
-    'kereviz': '🥬 Celery',
-    'sülfit': '🍷 Sulphites',
-  };
-  Map<String, String> get _allergenLabels =>
-      _lang == 'tr' ? _allergenLabelsTr : _allergenLabelsEn;
   Set<String> _selectedAllergens = {};
 
   @override

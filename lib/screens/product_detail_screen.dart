@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import '../models/allergens.dart';
 import '../models/product.dart';
 import '../services/compare_store.dart';
 import '../services/database_service.dart';
@@ -622,7 +623,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       border: Border.all(color: const Color(0xFFF43F5E).withOpacity(0.4)),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(a, style: const TextStyle(color: Color(0xFFF43F5E), fontSize: 13)),
+                    child: Text(Allergens.label(a, _lang), style: const TextStyle(color: Color(0xFFF43F5E), fontSize: 13)),
                   )).toList(),
                 ),
               ]),
@@ -750,7 +751,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 color: const Color(0xFFDC2626),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text(m.toUpperCase(),
+              child: Text(Allergens.label(m, _lang),
                   style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
             )).toList(),
           ),
