@@ -1,4 +1,4 @@
-package com.example.icinde_ne_var
+package com.peakaru.icindenevar
 
 import io.flutter.embedding.android.FlutterActivity
 
