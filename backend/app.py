@@ -335,9 +335,13 @@ def get_db():
         if pq:
             try:
                 _duck_conn = duckdb.connect(database=":memory:", read_only=False)
-                # Parquet'i view olarak yükle (lazy, hızlı başlangıç)
+                # Parquet'i view olarak yükle (lazy, hızlı başlangıç).
+                # Toplam yağ kolonu sonradan eklendi: eski parquet'te yoksa boş gelir
+                pq_cols = {r[0] for r in _duck_conn.execute(
+                    f"DESCRIBE SELECT * FROM read_parquet('{pq}')").fetchall()}
+                extra = "" if "fat_100g" in pq_cols else ", CAST(NULL AS DOUBLE) AS fat_100g"
                 _duck_conn.execute(
-                    f"CREATE VIEW products AS SELECT * FROM read_parquet('{pq}')"
+                    f"CREATE VIEW products AS SELECT *{extra} FROM read_parquet('{pq}')"
                 )
                 print(f"[INFO] Parquet yüklendi: {pq}")
             except Exception as e:
@@ -396,6 +400,7 @@ def _local_nutrients(row: dict) -> Nutrients:
         sodium_mg=normalize_sodium_mg(row.get("sodium_100g")),
         proteins=_num(row.get("proteins_100g")),
         fiber=_num(row.get("fiber_100g")),
+        fat=_num(row.get("fat_100g")),
     )
 
 
@@ -484,12 +489,12 @@ def search_products(q: str, limit: int = 10):
                 f"""
                 SELECT code, product_name, brands, ingredients_text,
                        "energy-kcal_100g", "sugars_100g", "saturated-fat_100g",
-                       "sodium_100g", "proteins_100g", "fiber_100g",
+                       "sodium_100g", "proteins_100g", "fiber_100g", fat_100g,
                        additives_tags, source
                 FROM (
                   SELECT code, product_name, brands, ingredients_text,
                          "energy-kcal_100g", "sugars_100g", "saturated-fat_100g",
-                         "sodium_100g", "proteins_100g", "fiber_100g",
+                         "sodium_100g", "proteins_100g", "fiber_100g", fat_100g,
                          additives_tags, source,
                          row_number() OVER (
                            PARTITION BY code
@@ -529,7 +534,7 @@ def search_products(q: str, limit: int = 10):
 
         cols = ("code", "product_name", "brands", "ingredients_text", "energy-kcal_100g",
                 "sugars_100g", "saturated-fat_100g", "sodium_100g", "proteins_100g",
-                "fiber_100g", "additives_tags", "source")
+                "fiber_100g", "fat_100g", "additives_tags", "source")
         results = []
         for values in rows:
             row = dict(zip(cols, values))
@@ -686,7 +691,7 @@ async def lookup_barcode(code: str, request: Request = None):
         sodium_mg=_pick(normalize_sodium_mg(off_nm.get("sodium_100g")), local_n.sodium_mg),
         proteins=_pick(_num(off_nm.get("proteins_100g")), local_n.proteins),
         fiber=_pick(_num(off_nm.get("fiber_100g")), local_n.fiber),
-        fat=_num(off_nm.get("fat_100g")),
+        fat=_pick(_num(off_nm.get("fat_100g")), local_n.fat),
     )
 
     # ============================================================
