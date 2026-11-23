@@ -20,12 +20,12 @@ void main() async {
   // Onboarding sadece ilk açılışta gösterilir
   final onboarded = await DatabaseService.getSetting('onboarding_done');
 
-  runApp(IcindNeVarApp(showOnboarding: onboarded == null));
+  runApp(IcindeNeVarApp(showOnboarding: onboarded == null));
 }
 
-class IcindNeVarApp extends StatelessWidget {
+class IcindeNeVarApp extends StatelessWidget {
   final bool showOnboarding;
-  const IcindNeVarApp({super.key, required this.showOnboarding});
+  const IcindeNeVarApp({super.key, required this.showOnboarding});
 
   @override
   Widget build(BuildContext context) {

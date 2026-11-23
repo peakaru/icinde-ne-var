@@ -216,16 +216,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.storage_rounded, size: 11, color: Colors.white.withOpacity(0.4)),
+                      Icon(Icons.storage_rounded, size: 11, color: Colors.white.withValues(alpha: 0.4)),
                       const SizedBox(width: 4),
                       Text(
                         _sourceLabel(p.dataSource),
-                        style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10),
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10),
                       ),
                     ]),
                   ),
@@ -242,9 +242,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF43F5E).withOpacity(0.15),
+                  color: const Color(0xFFF43F5E).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFF43F5E).withOpacity(0.5)),
+                  border: Border.all(color: const Color(0xFFF43F5E).withValues(alpha: 0.5)),
                 ),
                 child: Row(children: [
                   const Icon(Icons.dangerous_rounded, color: Color(0xFFF43F5E), size: 22),
@@ -263,9 +263,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFBBF24).withOpacity(0.1),
+                  color: const Color(0xFFFBBF24).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFFBBF24).withOpacity(0.4)),
+                  border: Border.all(color: const Color(0xFFFBBF24).withValues(alpha: 0.4)),
                 ),
                 child: Row(children: [
                   const Icon(Icons.info_outline_rounded, color: Color(0xFFFBBF24), size: 20),
@@ -374,9 +374,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withOpacity(0.12),
+                          color: const Color(0xFF10B981).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
                         ),
                         child: Text(
                           p.quantityInfo,
@@ -406,7 +406,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   const SizedBox(height: 6),
                   Text(
                     _lang == 'tr' ? '(100 g başına değerler)' : '(per 100 g)',
-                    style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11, fontStyle: FontStyle.italic),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 11, fontStyle: FontStyle.italic),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -433,7 +433,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               borderRadius: BorderRadius.circular(10),
                               borderSide: const BorderSide(color: Color(0xFF10B981))),
                           suffixText: _manualGrams != null
-                              ? '×' + (_manualGrams! / 100).toStringAsFixed(2)
+                              ? '×${(_manualGrams! / 100).toStringAsFixed(2)}'
                               : null,
                           suffixStyle: const TextStyle(color: Color(0xFF10B981), fontSize: 11),
                         ),
@@ -459,9 +459,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 // Çarpan: manuel > porsiyon (×serving/100) > paket (×quantity/100)
                 Builder(builder: (context) {
                   double mult = 1.0;
-                  if (_manualGrams != null && _manualGrams! > 0) mult = _manualGrams! / 100;
-                  else if (_portionMode == 1 && p.hasServing) mult = p.servingQuantity / 100;
-                  else if (_portionMode == 2 && p.hasPackage) mult = p.productQuantity / 100;
+                  if (_manualGrams != null && _manualGrams! > 0) {
+                    mult = _manualGrams! / 100;
+                  } else if (_portionMode == 1 && p.hasServing) {
+                    mult = p.servingQuantity / 100;
+                  } else if (_portionMode == 2 && p.hasPackage) {
+                    mult = p.productQuantity / 100;
+                  }
                   // tuz eşdeğeri: sodyum(mg) × 2.5 → g (etiketlerdeki "Tuz" ile aynı dil)
                   final double? tuzG = p.nutriBreakdown?.sodium == null
                       ? null
@@ -474,10 +478,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       _NutrimentRow(_lang == 'tr' ? 'Sodyum' : 'Sodium', p.nutriBreakdown!.sodium, 'mg', mult,
                           tuzG == null
                               ? null
-                              : (_lang == 'tr' ? 'tuz' : 'salt') +
-                                  ' ' +
-                                  (tuzG < 1 ? tuzG.toStringAsFixed(2) : tuzG.toStringAsFixed(1)) +
-                                  ' g'),
+                              : "${_lang == 'tr' ? 'tuz' : 'salt'} "
+                                  "${tuzG < 1 ? tuzG.toStringAsFixed(2) : tuzG.toStringAsFixed(1)} g"),
                       _NutrimentRow(_lang == 'tr' ? 'Protein' : 'Protein', p.nutriBreakdown!.proteins, 'g', mult),
                       _NutrimentRow(_lang == 'tr' ? 'Lif' : 'Fiber', p.nutriBreakdown!.fiber, 'g', mult),
                     ],
@@ -527,8 +529,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             Container(
                               width: 32, height: 32,
                               decoration: BoxDecoration(
-                                color: _ewgColor(r.ewgScore).withOpacity(0.2),
-                                border: Border.all(color: _ewgColor(r.ewgScore).withOpacity(0.6)),
+                                color: _ewgColor(r.ewgScore).withValues(alpha: 0.2),
+                                border: Border.all(color: _ewgColor(r.ewgScore).withValues(alpha: 0.6)),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Center(child: Text('${r.ewgScore}',
@@ -543,8 +545,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: evColor.withOpacity(0.15),
-                                  border: Border.all(color: evColor.withOpacity(0.5)),
+                                  color: evColor.withValues(alpha: 0.15),
+                                  border: Border.all(color: evColor.withValues(alpha: 0.5)),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
@@ -568,9 +570,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           margin: const EdgeInsets.only(top: 4, left: 4),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.04),
+                            color: Colors.white.withValues(alpha: 0.04),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white.withOpacity(0.06)),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                           ),
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             if (r.risk.isNotEmpty) ...[
@@ -619,8 +621,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   children: p.allergens!.map((a) => Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF43F5E).withOpacity(0.15),
-                      border: Border.all(color: const Color(0xFFF43F5E).withOpacity(0.4)),
+                      color: const Color(0xFFF43F5E).withValues(alpha: 0.15),
+                      border: Border.all(color: const Color(0xFFF43F5E).withValues(alpha: 0.4)),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(Allergens.label(a, _lang), style: const TextStyle(color: Color(0xFFF43F5E), fontSize: 13)),
@@ -727,7 +729,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFFDC2626).withOpacity(0.18),
+          color: const Color(0xFFDC2626).withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: const Color(0xFFDC2626), width: 1.5),
         ),
@@ -884,9 +886,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: widget.product.nutriscoreColor.withOpacity(0.15),
+                    color: widget.product.nutriscoreColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: widget.product.nutriscoreColor.withOpacity(0.4)),
+                    border: Border.all(color: widget.product.nutriscoreColor.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -970,7 +972,7 @@ class _SectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF132720),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.07)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
     );
@@ -1037,9 +1039,9 @@ class _PortionToggle extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         children: [
@@ -1065,11 +1067,11 @@ class _PortionToggle extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: isActive
-                ? const Color(0xFF10B981).withOpacity(0.28)
+                ? const Color(0xFF10B981).withValues(alpha: 0.28)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(9),
             border: isActive
-                ? Border.all(color: const Color(0xFF10B981).withOpacity(0.85), width: 1.5)
+                ? Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.85), width: 1.5)
                 : null,
           ),
           child: Text(
@@ -1095,11 +1097,8 @@ class _NutriScaleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final grades = ['A', 'B', 'C', 'D', 'E'];
-    final colors = [
-      const Color(0xFF038141), const Color(0xFF85BB2F),
-      const Color(0xFFFECB02), const Color(0xFFEE8100), const Color(0xFFE63E11),
-    ];
+    final grades = nutriScoreColors.keys.toList();
+    final colors = nutriScoreColors.values.toList();
     return Row(
       children: List.generate(5, (i) {
         final isActive = grades[i] == grade?.toUpperCase();
@@ -1108,7 +1107,7 @@ class _NutriScaleBar extends StatelessWidget {
             height: 28,
             margin: const EdgeInsets.symmetric(horizontal: 2),
             decoration: BoxDecoration(
-              color: colors[i].withOpacity(isActive ? 1.0 : 0.3),
+              color: colors[i].withValues(alpha: isActive ? 1.0 : 0.3),
               borderRadius: BorderRadius.circular(6),
               border: isActive ? Border.all(color: Colors.white, width: 2) : null,
             ),
@@ -1145,9 +1144,9 @@ class _InfoBlock extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1158,7 +1157,7 @@ class _InfoBlock extends StatelessWidget {
           ...items.map((item) => Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(children: [
-              Icon(Icons.arrow_right_rounded, color: color.withOpacity(0.7), size: 18),
+              Icon(Icons.arrow_right_rounded, color: color.withValues(alpha: 0.7), size: 18),
               const SizedBox(width: 4),
               Text(item, style: const TextStyle(color: Colors.white60, fontSize: 13)),
             ]),
@@ -1210,9 +1209,9 @@ class _BreakdownRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: ptColor.withOpacity(0.15),
+                color: ptColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: ptColor.withOpacity(0.4)),
+                border: Border.all(color: ptColor.withValues(alpha: 0.4)),
               ),
               child: Text(
                 '$ptPrefix$points puan',

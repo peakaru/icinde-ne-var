@@ -28,7 +28,7 @@ class LegalScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFF132720),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withOpacity(0.07)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

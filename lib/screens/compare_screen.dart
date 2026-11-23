@@ -24,11 +24,6 @@ class _CompareScreenState extends State<CompareScreen> {
     });
   }
 
-  static const _gradeColors = {
-    'A': Color(0xFF038141), 'B': Color(0xFF85BB2F), 'C': Color(0xFFFECB02),
-    'D': Color(0xFFEE8100), 'E': Color(0xFFE63E11),
-  };
-
   @override
   Widget build(BuildContext context) {
     final items = CompareStore.items;
@@ -121,7 +116,7 @@ class _CompareScreenState extends State<CompareScreen> {
             Text(
               _lang == 'tr' ? 'Değerler 100 g/ml başınadır.' : 'Values are per 100 g/ml.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11, fontStyle: FontStyle.italic),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 11, fontStyle: FontStyle.italic),
             ),
           ],
         ),
@@ -146,16 +141,16 @@ class _ProductHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final grade = (p.nutriscoreGrade ?? '?').toUpperCase();
-    final color = _CompareScreenState._gradeColors[grade] ?? const Color(0xFF64748B);
+    final color = nutriScoreColor(grade);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isWinner ? const Color(0xFF10B981).withOpacity(0.1) : const Color(0xFF132720),
+          color: isWinner ? const Color(0xFF10B981).withValues(alpha: 0.1) : const Color(0xFF132720),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isWinner ? const Color(0xFF10B981).withOpacity(0.6) : Colors.white.withOpacity(0.07),
+            color: isWinner ? const Color(0xFF10B981).withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.07),
             width: isWinner ? 1.5 : 1,
           ),
         ),
@@ -244,7 +239,7 @@ class _CompareRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF132720),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Row(
         children: [

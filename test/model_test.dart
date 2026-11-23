@@ -98,7 +98,7 @@ void main() {
     });
 
     test('nutriscoreColor grade eşleşir', () {
-      final mk = (String? g) => Product.fromJson({
+      Color mk(String? g) => Product.fromJson({
             'barcode': '1', 'product_name': 'x',
             'nutri_score': {'grade': g},
           }).nutriscoreColor;

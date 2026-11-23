@@ -18,7 +18,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _step = 0;
   bool _kvkkAccepted = false;
   String _lang = 'tr';
-  Set<String> _selectedAllergens = {};
+  final Set<String> _selectedAllergens = {};
 
   Map<String, String> get _allergenLabels => Allergens.labels(_lang);
 
@@ -66,9 +66,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           width: 110, height: 110,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: const Color(0xFF10B981).withOpacity(0.12),
+            color: const Color(0xFF10B981).withValues(alpha: 0.12),
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF10B981).withOpacity(0.4), width: 2),
+            border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4), width: 2),
           ),
           child: const Text('🛒', style: TextStyle(fontSize: 48)),
         ),
@@ -107,7 +107,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF10B981).withOpacity(0.35),
+                  color: const Color(0xFF10B981).withValues(alpha: 0.35),
                   blurRadius: 20, offset: const Offset(0, 5),
                 ),
               ],
@@ -130,9 +130,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           width: 44, height: 44,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.07)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
           ),
           child: Text(emoji, style: const TextStyle(fontSize: 20)),
         ),
@@ -157,7 +157,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Spacer(flex: 2),
-        Text('🚨', textAlign: TextAlign.center, style: const TextStyle(fontSize: 44)),
+        const Text('🚨', textAlign: TextAlign.center, style: TextStyle(fontSize: 44)),
         const SizedBox(height: 16),
         Text(
           _isTr ? 'Alerjenin var mı?' : 'Any allergens?',
@@ -188,7 +188,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                 decoration: BoxDecoration(
-                  color: selected ? const Color(0xFFF43F5E).withOpacity(0.18) : Colors.white.withOpacity(0.05),
+                  color: selected ? const Color(0xFFF43F5E).withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.05),
                   border: Border.all(
                     color: selected ? const Color(0xFFF43F5E) : Colors.white12,
                     width: selected ? 1.5 : 1,

@@ -137,23 +137,7 @@ class SearchResult {
         nutriscore: j['nutriscore'],
       );
 
-  /// Nutri-Score harfine göre renk (ürün detayiyle aynı palet)
-  Color get nutriscoreColor {
-    switch (nutriscore?.toUpperCase()) {
-      case 'A':
-        return const Color(0xFF038141);
-      case 'B':
-        return const Color(0xFF85BB2F);
-      case 'C':
-        return const Color(0xFFFECB02);
-      case 'D':
-        return const Color(0xFFEE8100);
-      case 'E':
-        return const Color(0xFFE63E11);
-      default:
-        return const Color(0xFF64748B);
-    }
-  }
+  Color get nutriscoreColor => nutriScoreColor(nutriscore);
 }
 
 class SearchService {

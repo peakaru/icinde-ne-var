@@ -120,7 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
-                          color: selected ? const Color(0xFFF43F5E).withOpacity(0.18) : Colors.white.withOpacity(0.05),
+                          color: selected ? const Color(0xFFF43F5E).withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.05),
                           border: Border.all(
                             color: selected ? const Color(0xFFF43F5E) : Colors.white12,
                             width: selected ? 1.5 : 1,
@@ -223,7 +223,7 @@ class _SettingCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF132720),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.07)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -252,7 +252,7 @@ class _LangButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFF10B981).withOpacity(0.2) : Colors.transparent,
+            color: selected ? const Color(0xFF10B981).withValues(alpha: 0.2) : Colors.transparent,
             border: Border.all(
               color: selected ? const Color(0xFF10B981) : Colors.white12,
             ),

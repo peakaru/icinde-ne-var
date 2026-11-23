@@ -245,7 +245,7 @@ class DatabaseService {
     }
   }
 
-  /// Cache'i boyut sınırlı tut (en eski 200 dışında sil)
+  /// Cache'i boyut sınırlı tut: 300 kaydı aşınca en yeni 200 kayıt dışındakileri sil
   static Future<void> trimCache() async {
     final database = await db;
     final count = Sqflite.firstIntValue(

@@ -13,9 +13,9 @@ void main() {
 
   testWidgets('App smoke test', (WidgetTester tester) async {
     // Onboarding kapalı — ana ekran açılır (gerçek kullanımda ilk açılışta görünür)
-    await tester.pumpWidget(const IcindNeVarApp(showOnboarding: false));
+    await tester.pumpWidget(const IcindeNeVarApp(showOnboarding: false));
     await tester.pump(const Duration(milliseconds: 300)); // animasyonlar açılsın
-    expect(find.byType(IcindNeVarApp), findsOneWidget);
+    expect(find.byType(IcindeNeVarApp), findsOneWidget);
   });
 
   testWidgets('Onboarding: karşılama + alerjen adımı', (WidgetTester tester) async {

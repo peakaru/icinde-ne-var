@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -285,11 +284,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                       borderRadius: BorderRadius.circular(22),
                                       color: const Color(0xFF0F2A1E),
                                       border: Border.all(
-                                        color: const Color(0xFF10B981).withOpacity(0.35),
+                                        color: const Color(0xFF10B981).withValues(alpha: 0.35),
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: const Color(0xFF10B981).withOpacity(glow),
+                                          color: const Color(0xFF10B981).withValues(alpha: glow),
                                           blurRadius: 30,
                                           spreadRadius: -4,
                                         ),
@@ -417,19 +416,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(colors: [
                                     Colors.transparent,
-                                    Colors.white.withOpacity(0.1),
+                                    Colors.white.withValues(alpha: 0.1),
                                   ]),
                                 ))),
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16),
                               child: Text(_lang == 'tr' ? 'VEYA' : 'OR',
-                                  style: TextStyle(color: Colors.white.withOpacity(0.25),
+                                  style: TextStyle(color: Colors.white.withValues(alpha: 0.25),
                                       fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.w600)),
                             ),
                             Expanded(child: Container(height: 1,
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(colors: [
-                                    Colors.white.withOpacity(0.1),
+                                    Colors.white.withValues(alpha: 0.1),
                                     Colors.transparent,
                                   ]),
                                 ))),
@@ -443,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             children: [
                               Text(
                                 _lang == 'tr' ? 'Barkod veya Ürün Adı Yaz' : 'Barcode or Product Name',
-                                style: TextStyle(color: Colors.white.withOpacity(0.5),
+                                style: TextStyle(color: Colors.white.withValues(alpha: 0.5),
                                     fontSize: 13, fontWeight: FontWeight.w600),
                               ),
                               const SizedBox(height: 10),
@@ -459,9 +458,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                       hintText: _lang == 'tr'
                                           ? 'Barkod (869...) veya ürün adı (nutella)'
                                           : 'Barcode (869...) or name (nutella)',
-                                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.18)),
+                                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.18)),
                                       filled: true,
-                                      fillColor: Colors.white.withOpacity(0.06),
+                                      fillColor: Colors.white.withValues(alpha: 0.06),
                                       contentPadding: const EdgeInsets.symmetric(
                                           horizontal: 18, vertical: 16),
                                       border: OutlineInputBorder(
@@ -470,7 +469,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                       enabledBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(16),
                                           borderSide: BorderSide(
-                                              color: Colors.white.withOpacity(0.08))),
+                                              color: Colors.white.withValues(alpha: 0.08))),
                                       focusedBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(16),
                                           borderSide: const BorderSide(
@@ -503,7 +502,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                       color: const Color(0xFF10B981),
                                       borderRadius: BorderRadius.circular(16),
                                       boxShadow: [
-                                        BoxShadow(color: const Color(0xFF10B981).withOpacity(0.35),
+                                        BoxShadow(color: const Color(0xFF10B981).withValues(alpha: 0.35),
                                             blurRadius: 20, offset: const Offset(0, 5)),
                                       ],
                                     ),
@@ -555,10 +554,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               width: 6, height: 6,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: const Color(0xFF10B981).withOpacity(opacity + 0.3),
+                                color: const Color(0xFF10B981).withValues(alpha: opacity + 0.3),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFF10B981).withOpacity(opacity),
+                                    color: const Color(0xFF10B981).withValues(alpha: opacity),
                                     blurRadius: 8,
                                   ),
                                 ],
@@ -570,7 +569,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   ? 'İçinde Ne Var? • Sağlık için geliştirildi'
                                   : "What's Inside? • Built for health",
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.22),
+                                color: Colors.white.withValues(alpha: 0.22),
                                 fontSize: 11,
                               ),
                             ),
@@ -605,8 +604,8 @@ class _BgPainter extends CustomPainter {
         center: Alignment(0.0, -0.7 + t * 0.05),
         radius: 0.9,
         colors: [
-          const Color(0xFF0D2D1E).withOpacity(0.8),
-          const Color(0xFF071310).withOpacity(0.0),
+          const Color(0xFF0D2D1E).withValues(alpha: 0.8),
+          const Color(0xFF071310).withValues(alpha: 0.0),
         ],
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, p1);
@@ -617,8 +616,8 @@ class _BgPainter extends CustomPainter {
         center: const Alignment(0.7, 0.6),
         radius: 0.5,
         colors: [
-          const Color(0xFF0B1530).withOpacity(0.4),
-          const Color(0xFF071310).withOpacity(0.0),
+          const Color(0xFF0B1530).withValues(alpha: 0.4),
+          const Color(0xFF071310).withValues(alpha: 0.0),
         ],
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, p2);
@@ -655,22 +654,22 @@ class _AeroCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        splashColor: borderColor.withOpacity(0.1),
-        highlightColor: borderColor.withOpacity(0.05),
+        splashColor: borderColor.withValues(alpha: 0.1),
+        highlightColor: borderColor.withValues(alpha: 0.05),
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
           decoration: BoxDecoration(
             gradient: gradient,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: borderColor.withOpacity(0.2)),
+            border: Border.all(color: borderColor.withValues(alpha: 0.2)),
           ),
           child: Row(children: [
             Container(
               width: 56, height: 56,
               decoration: BoxDecoration(
-                color: iconBg.withOpacity(0.2),
+                color: iconBg.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: iconBg.withOpacity(0.3)),
+                border: Border.all(color: iconBg.withValues(alpha: 0.3)),
               ),
               child: Icon(icon, color: iconBg, size: 28),
             ),
@@ -683,11 +682,11 @@ class _AeroCard extends StatelessWidget {
                     fontSize: 15, letterSpacing: 0.3)),
                 const SizedBox(height: 4),
                 Text(subtitle, style: TextStyle(
-                    color: Colors.white.withOpacity(0.4), fontSize: 12)),
+                    color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
               ],
             )),
             Icon(Icons.arrow_forward_ios_rounded,
-                color: Colors.white.withOpacity(0.2), size: 16),
+                color: Colors.white.withValues(alpha: 0.2), size: 16),
           ]),
         ),
       ),
@@ -712,9 +711,9 @@ class _SearchResultTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.07)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
           ),
           child: Row(children: [
             // Nutri-Score rozeti (hesaplanamadıysa jenerik ikon)
@@ -723,7 +722,7 @@ class _SearchResultTile extends StatelessWidget {
               decoration: BoxDecoration(
                 color: result.nutriscore != null
                     ? result.nutriscoreColor
-                    : const Color(0xFF10B981).withOpacity(0.12),
+                    : const Color(0xFF10B981).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: result.nutriscore != null
@@ -776,9 +775,9 @@ class _GlassIconBtn extends StatelessWidget {
       child: Container(
         width: 48, height: 48,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
+          color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         ),
         child: Icon(icon, color: color, size: 22),
       ),

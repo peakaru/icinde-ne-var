@@ -287,10 +287,10 @@ class _HistoryTileState extends State<_HistoryTile> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: widget.isSelected ? const Color(0xFF10B981).withOpacity(0.12) : const Color(0xFF132720),
+          color: widget.isSelected ? const Color(0xFF10B981).withValues(alpha: 0.12) : const Color(0xFF132720),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: widget.isSelected ? const Color(0xFF10B981).withOpacity(0.6) : Colors.white.withOpacity(0.07),
+            color: widget.isSelected ? const Color(0xFF10B981).withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.07),
           ),
         ),
         child: Row(

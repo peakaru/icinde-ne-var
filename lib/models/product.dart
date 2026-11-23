@@ -1,5 +1,17 @@
 import 'package:flutter/material.dart';
 
+/// Resmi Nutri-Score paleti (A → E). Bilinmeyen not gri gösterilir.
+const Map<String, Color> nutriScoreColors = {
+  'A': Color(0xFF038141),
+  'B': Color(0xFF85BB2F),
+  'C': Color(0xFFFECB02),
+  'D': Color(0xFFEE8100),
+  'E': Color(0xFFE63E11),
+};
+
+Color nutriScoreColor(String? grade) =>
+    nutriScoreColors[grade?.toUpperCase()] ?? const Color(0xFF64748B);
+
 class RiskIngredient {
   final String name;
   final String? nameEn;   // İngilizce UI'da gösterilen ad (eski kayıtlarda null)
@@ -53,15 +65,15 @@ class NutriBreakdown {
   });
 
   factory NutriBreakdown.fromJson(Map<String, dynamic> j) {
-    double? _val(String key) => (j[key]?['value'] as num?)?.toDouble();
-    int? _pts(String key) => (j[key]?['points'] as num?)?.toInt();
+    double? val(String key) => (j[key]?['value'] as num?)?.toDouble();
+    int? pts(String key) => (j[key]?['points'] as num?)?.toInt();
     return NutriBreakdown(
-      energy: _val('energy'),         energyPts: _pts('energy'),
-      sugars: _val('sugars'),         sugarsPts: _pts('sugars'),
-      saturatedFat: _val('saturated_fat'), saturatedFatPts: _pts('saturated_fat'),
-      sodium: _val('sodium'),         sodiumPts: _pts('sodium'),
-      proteins: _val('proteins'),     proteinsPts: _pts('proteins'),
-      fiber: _val('fiber'),           fiberPts: _pts('fiber'),
+      energy: val('energy'),         energyPts: pts('energy'),
+      sugars: val('sugars'),         sugarsPts: pts('sugars'),
+      saturatedFat: val('saturated_fat'), saturatedFatPts: pts('saturated_fat'),
+      sodium: val('sodium'),         sodiumPts: pts('sodium'),
+      proteins: val('proteins'),     proteinsPts: pts('proteins'),
+      fiber: val('fiber'),           fiberPts: pts('fiber'),
     );
   }
 }
@@ -165,39 +177,5 @@ class Product {
     );
   }
 
-  // SQLite için
-  Map<String, dynamic> toMap() {
-    return {
-      'barcode': barcode,
-      'product_name': productName,
-      'brand': brand,
-      'nutriscore_grade': nutriscoreGrade,
-      'nutriscore_score': nutriscorePoints?.toDouble(),
-      'ingredients': allIngredients?.join(', '),
-    };
-  }
-
-  factory Product.fromMap(Map<String, dynamic> map) {
-    return Product(
-      barcode: map['barcode'] ?? '',
-      productName: map['product_name'] ?? 'Bilinmeyen Ürün',
-      brand: map['brand'],
-      nutriscoreGrade: map['nutriscore_grade'],
-      nutriscorePoints: map['nutriscore_score'] != null ? (map['nutriscore_score'] as num).toInt() : null,
-      allIngredients: map['ingredients'] != null
-          ? (map['ingredients'] as String).split(', ')
-          : null,
-    );
-  }
-
-  Color get nutriscoreColor {
-    switch (nutriscoreGrade?.toUpperCase()) {
-      case 'A': return const Color(0xFF038141);
-      case 'B': return const Color(0xFF85BB2F);
-      case 'C': return const Color(0xFFFECB02);
-      case 'D': return const Color(0xFFEE8100);
-      case 'E': return const Color(0xFFE63E11);
-      default:  return const Color(0xFF64748B);
-    }
-  }
+  Color get nutriscoreColor => nutriScoreColor(nutriscoreGrade);
 }
