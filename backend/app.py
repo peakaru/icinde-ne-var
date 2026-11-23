@@ -11,7 +11,7 @@ import time
 import os
 import re
 import duckdb  # SQLite yerine (parquet + columnar)
-from typing import Tuple
+from typing import Optional, Tuple
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
@@ -130,34 +130,77 @@ async def rate_limit_middleware(request, call_next):
 # Veritabanı: DuckDB + Parquet (aşağıda get_db() içinde tanımlı)
 # Eski SQLite (products.db) artık kullanılmıyor — Parquet 4.7x daha küçük
 
-# Risk skorlarını yükle (v3.0.0 şema — evidence/color/source ile)
-# Tam risk veritabanı repoda yok (Space'te dosya olarak duruyor). Yoksa
-# örnek dosyaya düşülür ki backend yerelde de çalışsın.
+# Risk skorları (v3.0.0 şema — evidence/color/source ile).
+# Tam veritabanı repoda ve Space'te durmaz: ürün verisiyle aynı özel HF
+# dataset'inden HF_TOKEN ile indirilir. Sıra:
+#   1. backend/risk_scores.json (yerel geliştirme)
+#   2. özel dataset (Space)
+#   3. risk_scores.sample.json — SADECE Space dışında; canlıda örnek veriyle
+#      sessizce çalışmak yerine boş döner ve /health durumu gösterir.
+# Tam dosya yüklenemediyse sonraki isteklerde en fazla dakikada bir yeniden
+# denenir (geçici bir ağ hatası process ömrü boyunca sürmesin).
+DATA_REPO = "peakaru/icinde-ne-var-data"   # Parquet + risk DB'nin yaşadığı özel dataset
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 RISK_SCORES_PATH = os.path.join(_HERE, "risk_scores.json")
 RISK_SCORES_SAMPLE_PATH = os.path.join(_HERE, "risk_scores.sample.json")
+_RISK_RETRY_SECONDS = 60
+
+_risk_scores: dict = {}
+_risk_state = "missing"      # full | sample | missing
+_risk_last_try = 0.0
 
 
-def _load_risk_scores() -> dict:
-    for path in (RISK_SCORES_PATH, RISK_SCORES_SAMPLE_PATH):
-        if not os.path.exists(path):
-            continue
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-        except Exception as e:
-            print(f"[HATA] {os.path.basename(path)} yüklenemedi: {e}")
-            continue
-        scores = {k: v for k, v in raw.items() if k != "_meta"}
-        if path == RISK_SCORES_SAMPLE_PATH:
-            print("[UYARI] risk_scores.json yok — örnek veri kullanılıyor")
-        print(f"[INFO] {len(scores)} risk maddesi yüklendi")
-        return scores
-    print("[HATA] risk skoru dosyası bulunamadı — katkı analizi boş dönecek")
-    return {}
+def _read_risk_file(path: str) -> Optional[dict]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        return {k: v for k, v in raw.items() if k != "_meta"}
+    except Exception as e:
+        print(f"[HATA] {os.path.basename(path)} okunamadı: {e}")
+        return None
 
 
-risk_scores = _load_risk_scores()
+def _load_risk_scores() -> Tuple[dict, str]:
+    if os.path.exists(RISK_SCORES_PATH):
+        scores = _read_risk_file(RISK_SCORES_PATH)
+        if scores:
+            return scores, "full"
+    try:
+        from huggingface_hub import hf_hub_download
+        path = hf_hub_download(
+            repo_id=DATA_REPO, repo_type="dataset",
+            filename="risk_scores.json",
+            token=os.environ.get("HF_TOKEN"),
+        )
+        scores = _read_risk_file(path)
+        if scores:
+            return scores, "full"
+    except Exception as e:
+        print(f"[HATA] risk_scores.json dataset'ten indirilemedi: {e}")
+    if not os.environ.get("SPACE_ID") and os.path.exists(RISK_SCORES_SAMPLE_PATH):
+        scores = _read_risk_file(RISK_SCORES_SAMPLE_PATH)
+        if scores:
+            print("[UYARI] Tam risk DB yok — örnek veri kullanılıyor (yerel geliştirme)")
+            return scores, "sample"
+    print("[HATA] Risk DB yüklenemedi — katkı analizi boş dönecek")
+    return {}, "missing"
+
+
+def get_risk_scores() -> dict:
+    """Yüklü risk DB'sini döndür; tam değilse arada bir yeniden dene."""
+    global _risk_scores, _risk_state, _risk_last_try
+    now = time.time()
+    if _risk_state != "full" and now - _risk_last_try >= _RISK_RETRY_SECONDS:
+        _risk_last_try = now
+        scores, state = _load_risk_scores()
+        if state == "full" or not _risk_scores:
+            _risk_scores, _risk_state = scores, state
+            print(f"[INFO] Risk DB: {state}, {len(scores)} madde")
+    return _risk_scores
+
+
+get_risk_scores()
 
 # ============================================================
 # PORSİYON / GRAMAJ ÇIKARIMI
@@ -261,7 +304,6 @@ PARQUET_PATH = "products.parquet"
 _duck_conn = None  # global connection (lazy init)
 
 
-DATA_REPO = "peakaru/icinde-ne-var-data"   # Parquet'in yaşadığı dataset reposu
 
 
 def _resolve_parquet():
@@ -510,7 +552,8 @@ def legal():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    get_risk_scores()  # tam değilse yeniden denemeyi tetikler
+    return {"status": "healthy", "risk_db": _risk_state, "risk_entries": len(_risk_scores)}
 
 
 @app.get("/pending-barcodes")
@@ -780,7 +823,7 @@ async def lookup_barcode(code: str, request: Request = None):
     )
 
     # Risk analizi
-    risks, max_ewg = analyze_ingredients(all_ingredients, risk_scores)
+    risks, max_ewg = analyze_ingredients(all_ingredients, get_risk_scores())
     allergens = detect_allergens(all_ingredients + " " + name)
 
     # İçerik listesi parse
