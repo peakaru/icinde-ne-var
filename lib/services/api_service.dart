@@ -39,7 +39,7 @@ class ServerException implements Exception {
 }
 
 class ApiService {
-  static const String baseUrl = 'https://peakaru-peakaru-backend-v2.hf.space';
+  static const String baseUrl = 'https://peakaru-icinde-ne-var-api.hf.space';
 
   /// HTTP istemcisi — testlerde `MockClient` ile değiştirilir.
   @visibleForTesting
