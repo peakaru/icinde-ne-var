@@ -93,13 +93,25 @@ _daily_core = {"day": None, "count": 0}
 _off_map: dict = _dd(list)  # IP → OFF fallback çağrı zamanları
 
 
+def client_ip(request) -> str:
+    """İsteği yapan gerçek IP.
+
+    HF proxy'si gerçek istemci IP'sini X-Forwarded-For'un SONUNA ekler;
+    istemcinin kendi gönderdiği değerler başta kalır ("sahte, gerçek").
+    İlk değeri okumak, her istekte başlığı değiştiren birinin rate limit'i
+    tamamen atlatmasına izin veriyordu — bu yüzden en sağdaki değer alınır.
+    """
+    xff = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+    if xff:
+        return xff[-1]
+    return request.client.host if request.client else "unknown"
+
+
 @app.middleware("http")
 async def rate_limit_middleware(request, call_next):
     path = request.url.path
     if path not in _rate_exempt_paths:
-        # Gerçek IP: X-Forwarded-For (HF proxy) → ilk değer
-        xff = request.headers.get("x-forwarded-for", "")
-        ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+        ip = client_ip(request)
         now = time.time()
         # Pencere dışı kayıtları temizle
         _rate_map[ip] = [t for t in _rate_map[ip] if now - t < _RATE_WINDOW]
@@ -109,9 +121,13 @@ async def rate_limit_middleware(request, call_next):
                 content={"detail": "Çok fazla istek. Lütfen bir dakika içinde tekrar deneyin."},
             )
         _rate_map[ip].append(now)
-        # Boyutu sınırla (memory koruması — maksimum 10K IP takip et)
+        # Boyutu sınırla (memory koruması — maksimum 10K IP takip et).
+        # Önce süresi dolmuş IP'ler atılır; hepsini silmek aktif limitleri de sıfırlardı.
         if len(_rate_map) > 10000:
-            _rate_map.clear()
+            for k in [k for k, v in _rate_map.items() if not v or now - v[-1] >= _RATE_WINDOW]:
+                del _rate_map[k]
+            if len(_rate_map) > 10000:
+                _rate_map.clear()
         # Global günlük çekirdek sınırı (veri kazıma koruması)
         today = time.strftime("%Y-%m-%d")
         if _daily_core["day"] != today:
@@ -530,11 +546,8 @@ def pending_barcodes(token: str = ""):
 @app.get("/barcode/{code}")
 async def lookup_barcode(code: str, request: Request = None):
     code = (code or "").strip()
-    # OFF fallback limiti için çağıran IP (HF proxy → X-Forwarded-For ilk değer)
-    caller_ip = "unknown"
-    if request is not None:
-        xff = request.headers.get("x-forwarded-for", "")
-        caller_ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    # OFF fallback limiti için çağıran IP
+    caller_ip = client_ip(request) if request is not None else "unknown"
     # Girdi doğrulama: sadece 8-14 hane rakam — çöp istekler OFF'ya iletilmez
     if not code.isdigit() or not (8 <= len(code) <= 14):
         raise HTTPException(status_code=400, detail="Geçersiz barkod formatı")
