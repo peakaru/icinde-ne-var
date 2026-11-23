@@ -11,7 +11,7 @@ import time
 import os
 import re
 import duckdb  # SQLite yerine (parquet + columnar)
-from typing import Optional, Tuple, List, Dict
+from typing import Tuple
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse

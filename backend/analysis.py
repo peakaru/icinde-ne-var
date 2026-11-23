@@ -231,12 +231,11 @@ def calculate_nutri_score_2024(f: ProductFeatures, fvln_pct: float = 0,
         fvln_pts = 2
     elif fvln_pct >= 40:
         fvln_pts = 1
+    # Protein kuralı: olumsuz puan yüksekse protein sayılmaz (meyve-sebze tam puan değilse)
     if negative_total >= 11 and fvln_pts < 5:
         proteins_effective = 0
-        protein_rule_applied = True
     else:
         proteins_effective = pts_proteins
-        protein_rule_applied = False
 
     positive_total = fvln_pts + pts_fiber + proteins_effective
     total_points = negative_total - positive_total
