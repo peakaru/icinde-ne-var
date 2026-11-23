@@ -774,7 +774,7 @@ def search_products(q: str, limit: int = 10):
                     proteins_100g=float(pr or 0),
                     fiber_100g=float(fb or 0),
                 )
-                g, _, _ = calculate_nutri_score_2024(f, name or "")
+                g, _, _ = calculate_nutri_score_2024(f, product_name=name or "")
                 return g
             except Exception:
                 return None
@@ -1113,7 +1113,11 @@ async def lookup_barcode(code: str, request: Request = None):
         }
 
     # Nutri-Score (resmi algoritma)
-    grade, points, breakdown = calculate_nutri_score_2024(features, name, fvln_tahmin(all_ingredients))
+    grade, points, breakdown = calculate_nutri_score_2024(
+        features,
+        fvln_pct=fvln_tahmin(all_ingredients),
+        product_name=name,
+    )
 
     # Risk analizi
     risks, max_ewg = analyze_ingredients(all_ingredients)
