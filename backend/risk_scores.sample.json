@@ -1,0 +1,180 @@
+{
+  "_meta": {
+    "version": "3.0.0",
+    "last_updated": "2026-08-06",
+    "scoring_sources": [
+      "EWG (Environmental Working Group) Food Scores / Skin Deep — 1 (düşük) to 10 (yüksek)",
+      "EFSA (Avrupa Gıda Güvenliği Otoritesi) ADI & re-evaluations",
+      "FDA (USA) GRAS listesi ve renklendirici sertifikaları",
+      "JECFA (WHO/FAO) gıda katkı maddesi güvenlik değerlendirmeleri",
+      "IARC (Uluslararası Kanser Araştırma Ajansı) kanserojenite sınıflandırması",
+      "NOVA (Unicamp) gıda işleme sınıflandırması (1-4) — nova_penalty: işlenmiş/ultra-işlenmiş için 1",
+      "EU regulation EC 1333/2008 (izinli katkı maddeleri)"
+    ],
+    "score_scale": {
+      "1-2": "Düşük risk — doğal kaynak / genel olarak güvenli (GRAS)",
+      "3-4": "Düşük-orta risk — bazı hassasiyet durumlarında dikkat",
+      "5-6": "Orta risk — hassas gruplarda veya yüksek tüketimde etkili",
+      "7-8": "Yüksek risk — bazı ülkelerde kısıtlı / çocuklarda dikkat",
+      "9-10": "Çok yüksek risk — kanserojenite veya ciddi yan etki kanıtı"
+    },
+    "evidence_levels": {
+      "strong": "Güçlü bilimsel/regülatif konsensüs. Bir büyük otorite yasaklamış veya IARC 1/2A kanserojen sınıflandırmış.",
+      "moderate": "Tartışmalı — bazı çalışmalarda endişe, EFSA/FDA hâlâ izinli ama uyarı etiketi veya AB'de çocuk kısıtlaması var.",
+      "limited": "Hassas gruplarda veya çok yüksek tüketimde teorik endişe. Genel popülasyon için genelde güvenli kabul ediliyor."
+    },
+    "sources_legend": {
+      "IARC1": "IARC Grup 1 — İnsanlar için kanserojen (kesin)",
+      "IARC2A": "IARC Grup 2A — Muhtemel kanserojen",
+      "IARC2B": "IARC Grup 2B — Olası kanserojen",
+      "EFSA_ban": "EFSA güvenli bulmadı / AB'de yasak",
+      "EU_restricted": "AB'de kullanım kısıtlı / uyarı etiketi zorunlu",
+      "FDA_ban": "FDA (ABD) yasakladı",
+      "JECFA_ADI": "JECFA günlük alım limiti belirlemiş",
+      "GRAS": "FDA 'Generally Recognized as Safe' (genel olarak güvenli)",
+      "NOVA4": "Ultra-işlenmiş gıda işaretçisi (NOVA sınıflandırması)",
+      "EU_1169": "EU 1169/2011 alerjen bildirimi zorunlu"
+    },
+    "color_categories": {
+      "green": "Güvenli / doğal — yeşil rozet",
+      "yellow": "Dikkat / işlenmiş — sarı rozet",
+      "orange": "Riskli / hassas gruplarda dikkat — turuncu rozet",
+      "red": "Yüksek risk / kaçınılması önerilir — kırmızı rozet"
+    },
+    "nova_penalty_rule": "nova_penalty=1 madde tipik olarak ultra-işlenmiş gıdaların işaretçisi (koruyucu, yapay renk/tat, emülgatör, ayrıştırılmış bileşen). Doğal gıdalar veya ev tipi işleme için 0.",
+    "tags": {
+      "vegetarian": "Vejetaryen/vegan için sorun olabilir (hayvansal kaynak)",
+      "haram": "Domuz kaynağı veya alkol ihtimali — helal hassasiyet",
+      "allergen": "Alerjen bildirimi gerekli (EU 1169/2011)",
+      "kids": "Çocuklarda dikkat (EFSA/Çocuk koruma renkleri)",
+      "gut": "Bağırsak/mide irritasyonu raporları"
+    },
+    "disclaimer": "Bu puanlar kamu kaynaklarına dayalı bilgilendirme amaçlıdır, tıbbi tavsiye değildir. Kullanıcı kararı için kanıt düzeyi ve kaynakla birlikte sunulur.",
+    "note": "Sample of 5 entries. The full additive database (190 entries) is not published."
+  },
+  "Susam": {
+    "name": "Susam",
+    "ewg_score": 1,
+    "risk": "Doğal tohum; EU 14 büyük alerjenden biri",
+    "nova_penalty": 0,
+    "tags": [
+      "allergen"
+    ],
+    "keywords": [
+      "susam",
+      "sesame",
+      "tahin",
+      "tahini",
+      "sesamo",
+      "sésame",
+      "susam tohumu"
+    ],
+    "evidence": "strong",
+    "source": [
+      "EU_1169"
+    ],
+    "source_detail": "EU 14 büyük alerjenden biri (Reg 1169/2011).",
+    "color": "green",
+    "name_en": "Sesame",
+    "risk_en": "Natural seed; one of the EU's 14 major allergens",
+    "source_en": "One of the EU 14 major allergens (Reg 1169/2011)."
+  },
+  "Tuz": {
+    "name": "Tuz",
+    "ewg_score": 3,
+    "risk": "Aşırı tüketim hipertansiyon ve kardiyovasküler hastalık riskini artırır (WHO <5g/gün)",
+    "nova_penalty": 0,
+    "tags": [],
+    "keywords": [
+      "tuz",
+      "salt",
+      "sel",
+      "salz",
+      "sodyum klorür",
+      "deniz tuzu",
+      "kaya tuzu",
+      "iyotlu tuz"
+    ],
+    "evidence": "limited",
+    "color": "yellow",
+    "source": [],
+    "source_detail": "EFSA/FDA izinli; bazı çalışmalarda orta seviye endişe raporları.",
+    "name_en": "Salt",
+    "risk_en": "Excess intake raises hypertension and cardiovascular risk (WHO <5g/day)",
+    "source_en": "EFSA/FDA approved; moderate concern reports in some studies."
+  },
+  "Şeker": {
+    "name": "Şeker (İlave)",
+    "ewg_score": 6,
+    "risk": "İlave şeker; obezite, tip 2 diyabet ve diş çürüğü ile ilişkili (WHO <25g/gün)",
+    "nova_penalty": 1,
+    "tags": [],
+    "keywords": [
+      "sugar",
+      "şeker",
+      "sucre",
+      "zucker",
+      "toz şeker",
+      "kristal şeker",
+      "pudra şekeri",
+      "beyaz şeker"
+    ],
+    "evidence": "moderate",
+    "color": "orange",
+    "source": [],
+    "source_detail": "EFSA/FDA izinli; bazı çalışmalarda orta seviye endişe raporları.",
+    "name_en": "Added Sugar",
+    "risk_en": "Added sugar; linked to obesity, type 2 diabetes and tooth decay (WHO <25g/day)",
+    "source_en": "EFSA/FDA approved; moderate concern reports in some studies."
+  },
+  "Glikoz Şurubu": {
+    "name": "Glikoz Şurubu",
+    "ewg_score": 7,
+    "risk": "Yüksek glisemik indeks; insülin direncine katkıda bulunabilir",
+    "nova_penalty": 1,
+    "tags": [],
+    "keywords": [
+      "glikoz şurubu",
+      "glucose syrup",
+      "mısır şurubu",
+      "fruktoz şurubu",
+      "nişasta bazlı şeker",
+      "high fructose",
+      "HFCS",
+      "mısır şurubu (yüksek fruktozlu)"
+    ],
+    "evidence": "strong",
+    "color": "red",
+    "source": [],
+    "source_detail": "EFSA/FDA izinli; bazı çalışmalarda orta seviye endişe raporları.",
+    "name_en": "Glucose Syrup",
+    "risk_en": "High glycemic index; may contribute to insulin resistance",
+    "source_en": "EFSA/FDA approved; moderate concern reports in some studies."
+  },
+  "E249": {
+    "name": "Potasyum Nitrit",
+    "ewg_score": 9,
+    "risk": "Sucuk/salam koruyucu; yüksek ısıda nitrozamin (IARC kanserojen) oluşumu, bebek mamalarında yasak",
+    "nova_penalty": 1,
+    "tags": [
+      "kids"
+    ],
+    "keywords": [
+      "potasyum nitrit",
+      "potassium nitrite",
+      "e249",
+      "nitrit",
+      "nitrite"
+    ],
+    "evidence": "strong",
+    "source": [
+      "IARC1",
+      "EU_restricted"
+    ],
+    "source_detail": "İşlenmiş et + nitrit = IARC Grup 1 (insan kanserojeni, nitrozamin oluşumu). Bebek mamalarında AB'de yasak.",
+    "color": "red",
+    "name_en": "Potassium Nitrite",
+    "risk_en": "Sausage/salami preservative; nitrosamine (IARC carcinogen) formation at high heat, banned in baby food",
+    "source_en": "Processed meat + nitrite = IARC Group 1 (human carcinogen, nitrosamine formation). Banned in baby food in the EU."
+  }
+}

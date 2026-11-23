@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────────────────────────
+# ALLOWLIST: everything is ignored by default; only the source
+# code listed below is tracked. Datasets (products.db, parquet,
+# CSVs, the full risk database), tokens, logs and local tooling
+# never enter git.
+# ─────────────────────────────────────────────────────────────
+/*
+
+!/.gitignore
+!/README.md
+!/LICENSE
+!/.metadata
+!/analysis_options.yaml
+!/pubspec.yaml
+!/pubspec.lock
+!/lib/
+!/test/
+!/assets/
+!/android/
+!/backend/
+
+# Never track data or secrets, even inside allowed folders
+*.db
+*.db-*
+*.parquet
+*.csv
+*.jsonl
+*.log
+*token*
+*.env
+.env*
+
+# Curated additive database is private; a small sample is published instead
+backend/risk_scores.json
+
+# Flutter / Dart
+.dart_tool/
+build/
+**/doc/api/
+
+# Android
+android/.kotlin/
+android/.gradle/
+android/app/debug
+android/app/profile
+android/app/release
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# IDE
+*.iml
+.idea/
