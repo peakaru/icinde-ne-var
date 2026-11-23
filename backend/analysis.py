@@ -11,6 +11,18 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
 
+def fold_i(text: str) -> str:
+    """Lowercase text for keyword matching across Turkish and English.
+
+    Python's str.lower() turns "I" into "i" and "İ" into "i" + U+0307, so an
+    uppercase Turkish label such as "FINDIK" or "PEYNİR" never matched the
+    lowercase keywords "fındık" / "peynir". Folding I, İ, ı and i to a plain
+    "i" (on both the text and the keywords) fixes that while English words
+    ("MILK" -> "milk") keep matching.
+    """
+    return (text or "").replace("İ", "i").lower().replace("̇", "").replace("ı", "i")
+
+
 # Alerjenler (EU 1169/2011 — 14 büyük alerjen)
 ALLERGENS = {
     "süt": ["süt", "laktoz", "peynir", "milk", "lait", "cream", "whey",
@@ -113,14 +125,14 @@ BEVERAGE_KEYWORDS_WORD_BOUNDARY = [
 
 def is_beverage(product_name: str) -> bool:
     """Ürün adından içecek olup olmadığını tespit et."""
-    name_lower = (product_name or "").lower()
+    name_lower = fold_i(product_name)
     # Uzun keyword'ler: substring yeterince güvenli
     for kw in BEVERAGE_KEYWORDS:
-        if kw in name_lower:
+        if fold_i(kw) in name_lower:
             return True
     # Kısa keyword'ler: kelime sınırı şart (ChocoLait içinde 'cola' var!)
     for kw in BEVERAGE_KEYWORDS_WORD_BOUNDARY:
-        pattern = r'\b' + re.escape(kw) + r'\b'
+        pattern = r'\b' + re.escape(fold_i(kw)) + r'\b'
         if re.search(pattern, name_lower):
             return True
     return False
@@ -268,24 +280,50 @@ def calculate_nutri_score_2024(f: ProductFeatures, fvln_pct: float = 0,
 # ============================================================
 # ALERJEN TESPİTİ (SORUN 7 düzeltmesi — false-positive azaltma)
 # ============================================================
+# Kısa keyword'lerden sonra izin verilen ekler: "inek sütü", "sütlü", "sütten",
+# "yumurtalı", "eggs". Yokluk eki (-siz/-suz: "sütsüz") listede yok, eşleşmez;
+# "eggplant" / "arpacık" gibi başka kelimeler de eşleşmez.
+_ALLERGEN_SUFFIX = r"(?:s|[iuü]|l[iuü]|y[ae]|[ae]|[dt][ae]n?|l[ae]r|s[iuü]|n[iuü]n)?"
+
+# Keyword'den hemen sonra gelirse alerjenin YOKLUĞUNU anlatan ifadeler:
+# "glutensiz", "gluten içermez", "gluten-free", "glutenfrei"
+_NEGATION_AFTER = re.compile(r"\s*-?\s*(?:s[iuü]z|free\b|frei\b|i[cç]ermez)")
+
+# Alerjen keyword'ü içeren ama alerjen olmayan kalıplar
+_NON_ALLERGEN_PHRASES = tuple((fold_i(a), fold_i(b)) for a, b in (
+    ("cocoa butter", "cocoa"),
+    ("cacao butter", "cacao"),
+    ("shea butter", "shea"),
+    ("coconut milk", "coconut"),
+    ("hindistan cevizi sütü", "hindistan cevizi"),
+    ("cream of tartar", "tartar"),
+    ("balık kraker", "kraker"),  # balık şeklinde kraker, balık içermez
+))
+
+
 def detect_allergens(text: str) -> List[str]:
-    """İçerik metninden alerjen tespit et (false-positive azaltılmış)."""
-    text_lower = (text or "").lower()
+    """İçerik metninden alerjen tespit et (false-positive azaltılmış).
+
+    Büyük harfli Türkçe etiketleri ("FINDIK", "PEYNİR") ve Türkçe ekleri
+    ("inek sütü") tanır; "glutensiz" ve "cocoa butter" alerjen sayılmaz.
+    """
+    text_f = fold_i(text)
+    for phrase, replacement in _NON_ALLERGEN_PHRASES:
+        text_f = text_f.replace(phrase, replacement)
     found = []
     for allergen, keywords in ALLERGENS.items():
         for kw in keywords:
-            kw_lower = kw.lower()
-            # Kısa keyword'ler için kelime sınırı zorunlu
-            if len(kw_lower) <= 4:
-                pattern = r'\b' + re.escape(kw_lower) + r'\b'
-                if re.search(pattern, text_lower):
-                    found.append(allergen)
-                    break
+            kw_f = fold_i(kw)
+            # Kısa keyword'ler için kelime sınırı zorunlu (izin verilen eklerle)
+            if len(kw_f) <= 4:
+                pattern = r'\b' + re.escape(kw_f) + _ALLERGEN_SUFFIX + r'\b'
             else:
-                if kw_lower in text_lower:
-                    found.append(allergen)
-                    break
-    return list(set(found))
+                pattern = re.escape(kw_f)
+            if any(not _NEGATION_AFTER.match(text_f, m.end())
+                   for m in re.finditer(pattern, text_f)):
+                found.append(allergen)
+                break
+    return found
 
 
 # ============================================================
@@ -303,14 +341,14 @@ def analyze_ingredients(text: str, risk_scores: Dict[str, dict]) -> Tuple[List[D
     ingredients = [x.strip() for x in re.split(r'[,.]', text) if len(x.strip()) > 1]
 
     for ingredient in ingredients:
-        ingredient_lower = ingredient.lower()
+        ingredient_lower = fold_i(ingredient)
         for key, info in risk_scores.items():
             if not isinstance(info, dict):
                 continue
-            keywords = info.get("keywords", []) + [key.lower()]
+            keywords = info.get("keywords", []) + [key]
             matched = False
             for kw in keywords:
-                kw_lower = kw.lower()
+                kw_lower = fold_i(kw)
                 if len(kw_lower) <= 3:
                     # Çok kısa keyword — kelime sınırı şart
                     pattern = r'\b' + re.escape(kw_lower) + r'\b'
@@ -357,7 +395,11 @@ def analyze_ingredients(text: str, risk_scores: Dict[str, dict]) -> Tuple[List[D
 
 
 def _tr_norm(s: str) -> str:
-    """Tam Türkçe normalize: ığüşöç → igusoc (arama terimi için)."""
-    s = (s or "").lower()
-    table = str.maketrans("ığüşöçî", "igusoci")
+    """Tam Türkçe normalize: ığüşöç → igusoc (arama terimi için).
+
+    fold_i önce gelir: "İçim".lower() → "i̇çim" (birleşik nokta) olduğu için
+    büyük İ ile yazılan aramalar veritabanındaki "icim" ile hiç eşleşmiyordu.
+    """
+    s = fold_i(s)
+    table = str.maketrans("ğüşöçî", "gusoci")
     return s.translate(table)
