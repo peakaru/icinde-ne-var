@@ -59,6 +59,30 @@ class AllergenTest(unittest.TestCase):
         self.assertAllergens("şeker, fındık, süt tozu", ["süt", "kuruyemiş"])
         self.assertAllergens("may contain traces of peanut", ["kuruyemiş"])
 
+    def test_european_labels(self):
+        # Gerçek Nutella etiketi (Fransızca): fındık ve soya bulunmalı,
+        # "Sans gluten" gluten sayılmamalı
+        self.assertAllergens(
+            "Sucre, huile de palme, NOISETTES 13%, cacao maigre 7,4%, LAIT écrémé "
+            "en poudre 6,6%, LACTOSERUM en poudre, émulsifiants: lécithines [SOJA), "
+            "vanilline. Sans gluten.",
+            ["süt", "kuruyemiş", "soya"])
+        self.assertAllergens("Weizenmehl, Vollmilchpulver, Haselnüsse, Eier",
+                             ["gluten", "süt", "kuruyemiş", "yumurta"])
+        self.assertAllergens("farina di frumento, uova, senape", ["gluten", "yumurta", "hardal"])
+        self.assertAllergens("Sodium Metabisulphite, conservateur (E223)", ["sülfit"])
+
+    def test_european_negations_and_lookalikes(self):
+        self.assertAllergens("Harina de maíz, sal. Sin gluten.", [])
+        self.assertAllergens("Zucker, Kakaobutter, Kakaomasse", [])
+        self.assertAllergens("sucre, beurre de cacao", [])
+        self.assertAllergens("lait de coco, sucre", [])
+        self.assertAllergens("Buchweizenmehl, Salz", [])
+        self.assertAllergens("Zartbitterschokolade geraspelt", [])
+        self.assertAllergens("sel, poivre, noix de muscade", [])
+        self.assertAllergens("Mandelmilch (Wasser, Mandeln 7%)", ["kuruyemiş"])
+        self.assertAllergens("Sedano Rigati makarna, durum buğdayı irmiği", ["gluten"])
+
 
 class IngredientRiskTest(unittest.TestCase):
     RISKS = {

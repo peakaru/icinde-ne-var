@@ -24,21 +24,38 @@ def fold_i(text: str) -> str:
 
 
 # Alerjenler (EU 1169/2011 — 14 büyük alerjen)
+# Veri setinde Türkçe dışında çok sayıda Fransızca/Almanca/İspanyolca/İtalyanca
+# etiket var; yaygın karşılıklar da listede. 4 karakter ve altı keyword'ler
+# kelime sınırıyla, uzunlar alt-dizgi olarak aranır (bkz. detect_allergens).
 ALLERGENS = {
     "süt": ["süt", "laktoz", "peynir", "milk", "lait", "cream", "whey",
-            "butter", "lactose", "yoğurt", "kefir", "krema"],
+            "butter", "lactose", "yoğurt", "kefir", "krema",
+            "lactos", "fromage", "beurre", "milch", "leche", "latte", "melk"],
     "gluten": ["buğday", "gluten", "wheat", "flour", "barley", "rye",
-               "arpa", "çavdar", "yulaf (glutenli)"],
-    "yumurta": ["yumurta", "egg", "albumin", "yumurta akı", "yumurta sarısı"],
-    "soya": ["soya", "soy", "soya lesitini"],
+               "arpa", "çavdar", "yulaf (glutenli)",
+               "blé", "weizen", "trigo", "frumento", "épeautre", "spelt",
+               "dinkel", "gerste", "roggen", "orge", "seigle"],
+    "yumurta": ["yumurta", "egg", "albumin", "yumurta akı", "yumurta sarısı",
+                "oeuf", "œuf", "eier", "huevo", "uovo", "uova"],
+    "soya": ["soya", "soy", "soya lesitini", "soja"],
     "kuruyemiş": ["fıstık", "fındık", "ceviz", "badem", "antep fıstığı",
                   "hindistan cevizi", "peanut", "hazelnut", "walnut",
-                  "almond", "pistachio", "cashew", "kaju"],
-    "balık": ["balık", "fish", "seafood", "ton balığı", "somon"],
-    "susam": ["susam", "sesame", "tahini", "tahin"],
-    "hardal": ["hardal", "mustard"],
-    "kereviz": ["kereviz", "celery"],
-    "sülfit": ["sülfit", "sulfit", "kükürt dioksit", "sulfite"],
+                  "almond", "pistachio", "cashew", "kaju",
+                  "noisette", "amande", "noix", "cajou", "pistache",
+                  "arachide", "haselnuss", "haselnüss", "mandel", "walnuss",
+                  "walnüss", "erdnuss", "erdnüss",
+                  "avellana", "almendra", "cacahuet", "cacahuète",
+                  "nocciol", "mandorl", "pistacchi"],
+    "balık": ["balık", "fish", "seafood", "ton balığı", "somon",
+              "poisson", "fisch", "pescado", "pesce", "saumon", "salmon",
+              "anchois", "anchov", "sardine"],
+    "susam": ["susam", "sesame", "tahini", "tahin", "sésame", "sesam"],
+    "hardal": ["hardal", "mustard", "moutarde", "senf", "mostaza", "senape"],
+    "kereviz": ["kereviz", "celery", "céleri", "sellerie"],
+    "sülfit": ["sülfit", "sulfit", "kükürt dioksit", "sulfite", "sulphite",
+               "sulfur dioxide", "sulphur dioxide", "sulfureux",
+               "e220", "e221", "e222", "e223", "e224", "e225", "e226",
+               "e227", "e228"],
 }
 
 
@@ -288,6 +305,16 @@ _ALLERGEN_SUFFIX = r"(?:s|[iuü]|l[iuü]|y[ae]|[ae]|[dt][ae]n?|l[ae]r|s[iuü]|n[
 # "glutensiz", "gluten içermez", "gluten-free", "glutenfrei"
 _NEGATION_AFTER = re.compile(r"\s*-?\s*(?:s[iuü]z|free\b|frei\b|i[cç]ermez)")
 
+# Uzun ama başka kelimelerin içinde geçen keyword'ler: bunlar da kelime
+# sınırıyla aranır ("geraspelt" ≠ spelt, "caffè latte" ama "lattice" değil)
+_WHOLE_WORD_KEYWORDS = {"spelt", "latte"}
+
+# Keyword'den hemen ÖNCE gelirse yokluk anlatan ifadeler:
+# "sans gluten", "sin gluten", "senza latte", "ohne milch", "without egg",
+# "no milk", "free from gluten"
+_NEGATION_BEFORE = re.compile(
+    r"\b(?:sans|sin|senza|ohne|without|no|free\s+from)\s*[:\-]?\s*$")
+
 # Alerjen keyword'ü içeren ama alerjen olmayan kalıplar
 _NON_ALLERGEN_PHRASES = tuple((fold_i(a), fold_i(b)) for a, b in (
     ("cocoa butter", "cocoa"),
@@ -297,6 +324,23 @@ _NON_ALLERGEN_PHRASES = tuple((fold_i(a), fold_i(b)) for a, b in (
     ("hindistan cevizi sütü", "hindistan cevizi"),
     ("cream of tartar", "tartar"),
     ("balık kraker", "kraker"),  # balık şeklinde kraker, balık içermez
+    ("beurre de cacao", "cacao"),
+    ("beurre de karité", "karité"),
+    ("kakaobutter", "kakao"),
+    ("lait de coco", "coco"),
+    ("noix de muscade", "muscade"),  # muskat cevizi kuruyemiş değil
+    # Bitkisel "süt"ler: süt alerjeni değil (asıl bitki ayrıca eşleşir)
+    ("almond milk", "almond"), ("soy milk", "soy"), ("oat milk", "oat"),
+    ("rice milk", "rice"), ("lait d'amande", "amande"), ("lait de soja", "soja"),
+    ("lait d'avoine", "avoine"), ("lait de riz", "riz"),
+    ("mandelmilch", "mandel"), ("sojamilch", "soja"), ("hafermilch", "hafer"),
+    ("reismilch", "reis"), ("kokosmilch", "kokos"), ("leche de coco", "coco"),
+    ("latte di cocco", "cocco"),
+    # Fıstık ezmesi süt içermez (fıstık ayrıca eşleşir)
+    ("peanut butter", "peanut"), ("beurre d'arachide", "arachide"),
+    ("beurre de cacahuète", "cacahuète"), ("erdnussbutter", "erdnuss"),
+    # Karabuğday (buckwheat) buğday değil, glutensiz
+    ("buchweizen", "buchwz"), ("blé noir", "sarrasin"),
 ))
 
 
@@ -304,7 +348,8 @@ def detect_allergens(text: str) -> List[str]:
     """İçerik metninden alerjen tespit et (false-positive azaltılmış).
 
     Büyük harfli Türkçe etiketleri ("FINDIK", "PEYNİR") ve Türkçe ekleri
-    ("inek sütü") tanır; "glutensiz" ve "cocoa butter" alerjen sayılmaz.
+    ("inek sütü") tanır; "glutensiz", "sans gluten" ve "cocoa butter"
+    alerjen sayılmaz. Yaygın Avrupa dillerindeki karşılıkları da tanır.
     """
     text_f = fold_i(text)
     for phrase, replacement in _NON_ALLERGEN_PHRASES:
@@ -314,11 +359,12 @@ def detect_allergens(text: str) -> List[str]:
         for kw in keywords:
             kw_f = fold_i(kw)
             # Kısa keyword'ler için kelime sınırı zorunlu (izin verilen eklerle)
-            if len(kw_f) <= 4:
+            if len(kw_f) <= 4 or kw_f in _WHOLE_WORD_KEYWORDS:
                 pattern = r'\b' + re.escape(kw_f) + _ALLERGEN_SUFFIX + r'\b'
             else:
                 pattern = re.escape(kw_f)
             if any(not _NEGATION_AFTER.match(text_f, m.end())
+                   and not _NEGATION_BEFORE.search(text_f[max(0, m.start() - 20):m.start()])
                    for m in re.finditer(pattern, text_f)):
                 found.append(allergen)
                 break
