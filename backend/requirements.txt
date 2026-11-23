@@ -1,6 +1,4 @@
 fastapi
 httpx
-Pillow
-python-multipart
 huggingface_hub<0.26
 duckdb

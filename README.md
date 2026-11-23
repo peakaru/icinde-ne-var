@@ -96,7 +96,9 @@ lib/
   screens/     home, scanner, product detail, compare, history, favorites, settings
   services/    API client, SQLite storage, compare basket
 backend/
-  app.py              API: barcode lookup, search, Nutri-Score, risk & allergen analysis
-  risk_scores.json    additive risk database
-test/          model and widget tests
+  app.py                   API: barcode lookup, search, rate limiting, Open Food Facts fallback
+  analysis.py              Nutri-Score, allergen and additive-risk rules (stdlib only)
+  risk_scores.sample.json  schema sample of the private additive risk database
+  tests/                   unit tests for analysis.py
+test/          Flutter unit tests (models, API client, storage, compare)
 ```

@@ -1,30 +1,20 @@
 """
 İçinde Ne Var? - Backend API (Hugging Face Spaces)
-SQLite veritabanı + Open Food Facts API hibrit kullanım.
 
-Version: 2.0.0 — Düzeltmeler:
-  - Sodium birim normalization (BUG 1)
-  - risk_scores.json v3.0.0 şema desteği (BUG 2)
-  - İçecek kategorisi isim-bazlı tespit (BUG 4)
-  - Resmi Nutri-Score eşik tabloları + protein kuralı (BUG 5, 6)
-  - OFF sadece yerel veri eksikse çağrılıyor (SORUN 8)
-  - image_url düzeltildi (SORUN 9)
-  - Keyword false-positive azaltıldı (SORUN 7)
-
-Kanal uyumluluğu: Eski JSON alanları (name, ewg_score, risk) korundu,
-yeni alanlar (evidence, color, source_detail) eklendi. Flutter'a dokunmadan
-çalışır; istersen yeni alanları UI'da gösterirsin.
+Barkod sorgusu ve isimle arama. Ürün verisi DuckDB ile Parquet'ten okunur
+(özel HF dataset'i, HF_TOKEN ile); yerel kayıt eksikse Open Food Facts'e
+düşülür. Analiz kuralları (Nutri-Score, alerjen, katkı riski) analysis.py'de.
 """
+import hmac
 import json
 import time
 import os
 import re
 import duckdb  # SQLite yerine (parquet + columnar)
 from typing import Optional, Tuple, List, Dict
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image
-import io
+from fastapi.responses import FileResponse, HTMLResponse
 import httpx
 from analysis import (
     ProductFeatures,
@@ -42,15 +32,6 @@ try:
     _SPACES_AVAILABLE = True
 except ImportError:
     _SPACES_AVAILABLE = False
-
-# Barkod okuma (opsiyonel — telefonda yapılıyor, backend'de gerek değil)
-try:
-    from pyzbar.pyzbar import decode as pyzbar_decode
-    PYZBAR_AVAILABLE = True
-except Exception:
-    PYZBAR_AVAILABLE = False
-    pyzbar_decode = None
-    print("[UYARI] pyzbar yüklenemedi — /analyze-image devre dışı (telefonda barkod okuma yapılır)")
 
 app = FastAPI(title="İçinde Ne Var API", version="3.1.0")
 
@@ -150,16 +131,33 @@ async def rate_limit_middleware(request, call_next):
 # Eski SQLite (products.db) artık kullanılmıyor — Parquet 4.7x daha küçük
 
 # Risk skorlarını yükle (v3.0.0 şema — evidence/color/source ile)
-RISK_SCORES_PATH = "risk_scores.json"
-try:
-    with open(RISK_SCORES_PATH, "r", encoding="utf-8") as f:
-        _risk_raw = json.load(f)
-    # _meta anahtarını ayıkla
-    risk_scores = {k: v for k, v in _risk_raw.items() if k != "_meta"}
-    print(f"[INFO] {len(risk_scores)} risk maddesi yüklendi")
-except Exception as e:
-    print(f"[HATA] risk_scores.json yüklenemedi: {e}")
-    risk_scores = {}
+# Tam risk veritabanı repoda yok (Space'te dosya olarak duruyor). Yoksa
+# örnek dosyaya düşülür ki backend yerelde de çalışsın.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+RISK_SCORES_PATH = os.path.join(_HERE, "risk_scores.json")
+RISK_SCORES_SAMPLE_PATH = os.path.join(_HERE, "risk_scores.sample.json")
+
+
+def _load_risk_scores() -> dict:
+    for path in (RISK_SCORES_PATH, RISK_SCORES_SAMPLE_PATH):
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception as e:
+            print(f"[HATA] {os.path.basename(path)} yüklenemedi: {e}")
+            continue
+        scores = {k: v for k, v in raw.items() if k != "_meta"}
+        if path == RISK_SCORES_SAMPLE_PATH:
+            print("[UYARI] risk_scores.json yok — örnek veri kullanılıyor")
+        print(f"[INFO] {len(scores)} risk maddesi yüklendi")
+        return scores
+    print("[HATA] risk skoru dosyası bulunamadı — katkı analizi boş dönecek")
+    return {}
+
+
+risk_scores = _load_risk_scores()
 
 # ============================================================
 # PORSİYON / GRAMAJ ÇIKARIMI
@@ -415,7 +413,8 @@ def search_products(q: str, limit: int = 10):
                          row_number() OVER (
                            PARTITION BY code
                            ORDER BY length(coalesce(ingredients_text, '')) DESC,
-                                    length(coalesce(product_name, '')) ASC
+                                    length(coalesce(product_name, '')) ASC,
+                                    product_name
                          ) AS rn
                   FROM products
                   WHERE ({where}) AND code IS NOT NULL AND code != '' {extra}
@@ -424,7 +423,8 @@ def search_products(q: str, limit: int = 10):
                 ORDER BY
                   CASE WHEN {name_norm} LIKE ? THEN 0 ELSE 1 END,
                   CASE WHEN coalesce(ingredients_text, '') != '' THEN 0 ELSE 1 END,
-                  length(coalesce(product_name, ''))
+                  length(coalesce(product_name, '')),
+                  code
                 LIMIT ?
                 """,
                 params + [f"{words[0]}%", limit],
@@ -502,10 +502,8 @@ def root():
 @app.get("/legal", include_in_schema=False)
 def legal():
     """Gizlilik politikası web sayfası (Play Console URL gereksinimi için)."""
-    from fastapi.responses import FileResponse
-    from pathlib import Path as _P
-    f = _P(__file__).parent / "docs" / "index.html"
-    if f.exists():
+    f = os.path.join(_HERE, "docs", "index.html")
+    if os.path.exists(f):
         return FileResponse(f, media_type="text/html")
     return HTMLResponse("<h1>İçinde Ne Var?</h1><p>Legal page missing</p>")
 
@@ -515,23 +513,14 @@ def health():
     return {"status": "healthy"}
 
 
-@app.get("/benchmark")
-def benchmark():
-    """ML benchmark verileri (eski API uyumluluğu)."""
-    return [
-        {"name": "Random Forest", "accuracy": 0.89, "precision": 0.88, "recall": 0.87, "f1_score": 0.87},
-        {"name": "Gradient Boosting", "accuracy": 0.87, "precision": 0.86, "recall": 0.85, "f1_score": 0.85},
-        {"name": "SVM", "accuracy": 0.82, "precision": 0.81, "recall": 0.80, "f1_score": 0.80},
-        {"name": "Naive Bayes", "accuracy": 0.76, "precision": 0.75, "recall": 0.74, "f1_score": 0.74},
-    ]
-
-
 @app.get("/pending-barcodes")
 def pending_barcodes(token: str = ""):
     """Bulunamayan barkodları listele ve dosyayı temizle (barkod kazandırma
     döngüsü — biz periyodik çekip DB'ye kazandırıyoruz). Basit token korumalı."""
-    if token != os.environ.get("PENDING_TOKEN"):
-        # Token yalnızca Space secret'tan gelir — kodda varsayılan değer YOK
+    expected = os.environ.get("PENDING_TOKEN", "")
+    # Token yalnızca Space secret'tan gelir — kodda varsayılan değer YOK.
+    # Secret tanımlı değilse uç nokta kapalı.
+    if not expected or not hmac.compare_digest(token.encode(), expected.encode()):
         raise HTTPException(status_code=403, detail="Yetkisiz")
     codes = []
     try:
@@ -818,49 +807,6 @@ async def lookup_barcode(code: str, request: Request = None):
     }
 
 
-@app.post("/analyze-image")
-async def analyze_image(file: UploadFile = File(...), request: Request = None):
-    if not PYZBAR_AVAILABLE:
-        raise HTTPException(status_code=500, detail="Barkod okuma özelliği kullanılamıyor")
-
-    try:
-        # Yükleme kısıtı: içerik tipi + boyut (decompress bomb / abuse koruması)
-        ct = (file.content_type or "").lower()
-        if ct and not ct.startswith("image/"):
-            raise HTTPException(status_code=400, detail="Sadece görsel dosyası yüklenebilir")
-        contents = await file.read()
-        if len(contents) > 10 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="Görsel çok büyük (max 10 MB)")
-        image = Image.open(io.BytesIO(contents))
-
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-
-        # Barkod oku - orijinal görüntü
-        barcodes = pyzbar_decode(image)
-
-        # Bulunamazsa gri tonlamayı dene
-        if not barcodes:
-            gray_image = image.convert('L')
-            barcodes = pyzbar_decode(gray_image)
-
-        # Hala bulunamazsa 2x büyüt
-        if not barcodes:
-            width, height = image.size
-            scaled_image = image.resize((width * 2, height * 2), Image.LANCZOS)
-            barcodes = pyzbar_decode(scaled_image)
-
-        if barcodes:
-            barcode = barcodes[0].data.decode("utf-8")
-            return await lookup_barcode(barcode, request)
-        else:
-            raise HTTPException(status_code=400, detail="Barkod bulunamadı")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 # ============================================================
 # GRADIO MOUNT — HF Space Gradio SDK için zorunlu
 # FastAPI endpoint'ler (/barcode, /health) aynen çalışır,
@@ -874,10 +820,9 @@ with gr.Blocks(title="İçinde Ne Var API", theme=gr.themes.Soft()) as demo:
     gr.Markdown("---")
     gr.Markdown("### Erişilebilir endpoint'ler:")
     gr.Markdown("- `GET /barcode/{code}` — Barkod sorgula")
-    gr.Markdown("- `POST /analyze-image` — Görselden barkod oku")
+    gr.Markdown("- `GET /search?q=...` — İsimle ara")
     gr.Markdown("- `GET /health` — Sağlık kontrolü")
-    gr.Markdown("- `GET /benchmark` — ML benchmark verileri")
-    gr.Markdown(f"- Version: 3.1.0 (Gradio mount)")
+    gr.Markdown("- Version: 3.1.0 (Gradio mount)")
 
 # FastAPI app'ine Gradio'yu mount et (root path)
 app = gr.mount_gradio_app(app, demo, path="/")

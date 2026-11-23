@@ -29,4 +29,14 @@ FastAPI service (mounted in a Gradio app so it can run as a Hugging Face Space).
   dataset and is downloaded at start-up with the `HF_TOKEN` Space secret. Missing barcodes
   fall back to the Open Food Facts API.
 - **Additive risks**: `risk_scores.json` (190 entries, not included in this repository).
-  `risk_scores.sample.json` shows the schema with a few entries.
+  `risk_scores.sample.json` shows the schema with a few entries; the backend falls back to
+  it when the full file is missing, so it still starts locally.
+
+## Tests
+
+```
+python -m unittest discover -s backend/tests
+```
+
+The analysis rules (Nutri-Score, allergens, additive matching) live in `analysis.py`, which
+has no third-party dependencies, so the tests run without installing anything.
