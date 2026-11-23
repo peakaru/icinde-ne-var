@@ -109,8 +109,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       Navigator.push(context, MaterialPageRoute(
         builder: (_) => ProductDetailScreen(product: product),
       ));
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+      if (e is! ProductNotFoundException) {
+        _showLookupError(e);
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(_lang == 'tr' ? 'Ürün açılamadı.' : 'Could not open product.',
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
@@ -147,46 +151,65 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ));
     } catch (e) {
       if (!mounted) return;
-      final isRateLimit = e is RateLimitException || e.toString().contains('RateLimitException');
-      if (isRateLimit) {
-        // Rate limit — geçici durum, ürün yok değil
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-            _lang == 'tr'
-                ? 'Çok hızlı tarama yaptın — ~1 dakika sonra tekrar dene.'
-                : 'Scanning too fast — try again in ~1 minute.',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-          ),
-          backgroundColor: const Color(0xFF3A2A1A),
-          behavior: SnackBarBehavior.floating,
-        ));
-        return;
-      }
-      // Ürün veritabanında yok → isimle aramaya yönlendir
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-          _lang == 'tr'
-              ? 'Bu barkod veritabanımızda yok. İsmiyle aramayı dene!'
-              : 'This barcode is not in our database. Try searching by name!',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: const Color(0xFF1A3A28),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 6),
-        action: SnackBarAction(
-          label: _lang == 'tr' ? 'İsimle Ara' : 'Search Name',
-          textColor: const Color(0xFF2EE89A),
-          onPressed: () {
-            // Barkod yazısını temizle, arama alanına odaklan
-            _barcodeController.clear();
-            setState(() => _searchResults = []);
-            _searchFocus.requestFocus();
-          },
-        ),
-      ));
+      _showLookupError(e);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Sorgu hatasını türüne göre anlat: "ürün yok" ile "bağlantı yok" ya da
+  /// "sunucu yanıt vermiyor" aynı şey değil.
+  void _showLookupError(Object e) {
+    final tr = _lang == 'tr';
+    String? message;
+    if (e is RateLimitException) {
+      message = tr
+          ? 'Çok hızlı tarama yaptın — ~1 dakika sonra tekrar dene.'
+          : 'Scanning too fast — try again in ~1 minute.';
+    } else if (e is NetworkException) {
+      message = tr
+          ? 'İnternet bağlantısı yok ya da sunucuya ulaşılamadı. Daha önce taradığın ürünler çevrimdışı da açılır.'
+          : 'No internet connection or the server is unreachable. Products you scanned before also open offline.';
+    } else if (e is InvalidBarcodeException) {
+      message = tr
+          ? 'Bu bir ürün barkodu gibi görünmüyor (8–14 haneli olmalı).'
+          : "This doesn't look like a product barcode (it should have 8–14 digits).";
+    } else if (e is! ProductNotFoundException) {
+      message = tr
+          ? 'Sunucu şu an yanıt vermiyor. Biraz sonra tekrar dene.'
+          : 'The server is not responding right now. Please try again shortly.';
+    }
+    if (message != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        backgroundColor: const Color(0xFF3A2A1A),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ));
+      return;
+    }
+    // Ürün veritabanında yok → isimle aramaya yönlendir
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+        _lang == 'tr'
+            ? 'Bu barkod veritabanımızda yok. İsmiyle aramayı dene!'
+            : 'This barcode is not in our database. Try searching by name!',
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+      ),
+      backgroundColor: const Color(0xFF1A3A28),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 6),
+      action: SnackBarAction(
+        label: _lang == 'tr' ? 'İsimle Ara' : 'Search Name',
+        textColor: const Color(0xFF2EE89A),
+        onPressed: () {
+          // Barkod yazısını temizle, arama alanına odaklan
+          _barcodeController.clear();
+          setState(() => _searchResults = []);
+          _searchFocus.requestFocus();
+        },
+      ),
+    ));
   }
 
   Future<void> _pickFromGallery() async {
@@ -450,8 +473,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     onChanged: _onQueryChanged,
                                     onSubmitted: (v) {
                                       final t = v.trim();
-                                      // Sadece rakamsa barkod sorgusu, değilse arama zaten sonuç verdi
-                                      if (RegExp(r'^\d{6,}$').hasMatch(t)) {
+                                      // Sadece rakamsa barkod sorgusu (format kontrolü
+                                      // ApiService'te), değilse arama zaten sonuç verdi
+                                      if (RegExp(r'^\d+$').hasMatch(t)) {
                                         _lookupBarcode(t);
                                       }
                                     },
@@ -461,7 +485,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 GestureDetector(
                                   onTap: () {
                                     final t = _barcodeController.text.trim();
-                                    if (RegExp(r'^\d{6,}$').hasMatch(t)) {
+                                    if (RegExp(r'^\d+$').hasMatch(t)) {
                                       _lookupBarcode(t);
                                     } else if (t.length >= 2) {
                                       _runSearch(t);

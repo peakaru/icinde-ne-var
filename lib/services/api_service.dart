@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/product.dart';
@@ -11,22 +12,77 @@ class RateLimitException implements Exception {
   String toString() => 'RateLimitException';
 }
 
+/// 404 — ürün ne veritabanında ne de Open Food Facts'te var
+class ProductNotFoundException implements Exception {
+  @override
+  String toString() => 'ProductNotFoundException';
+}
+
+/// Barkod formatı geçersiz (backend 8–14 haneli rakam bekler)
+class InvalidBarcodeException implements Exception {
+  @override
+  String toString() => 'InvalidBarcodeException';
+}
+
+/// Sunucuya ulaşılamadı: internet yok, DNS hatası veya zaman aşımı
+class NetworkException implements Exception {
+  @override
+  String toString() => 'NetworkException';
+}
+
+/// Sunucu hatası (5xx) ya da çözümlenemeyen yanıt
+class ServerException implements Exception {
+  final int statusCode;
+  ServerException(this.statusCode);
+  @override
+  String toString() => 'ServerException($statusCode)';
+}
+
 class ApiService {
   static const String baseUrl = 'https://peakaru-peakaru-backend-v2.hf.space';
 
-  static Future<Product> lookupBarcode(String barcode) async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/barcode/$barcode'))
-        .timeout(const Duration(seconds: 30));
+  /// HTTP istemcisi — testlerde `MockClient` ile değiştirilir.
+  @visibleForTesting
+  static http.Client client = http.Client();
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(utf8.decode(response.bodyBytes));
-      return Product.fromJson(data);
-    } else if (response.statusCode == 429) {
-      throw RateLimitException();
-    } else {
-      final error = jsonDecode(response.body);
-      throw Exception(error['detail'] ?? 'Barkod bulunamadı');
+  /// Backend'in kabul ettiği barkod formatı (EAN-8 … GTIN-14)
+  static bool isValidBarcode(String code) => RegExp(r'^\d{8,14}$').hasMatch(code);
+
+  /// GET isteği; bağlantı hatalarını [NetworkException]'a çevirir.
+  static Future<http.Response> _get(Uri uri, Duration timeout) async {
+    try {
+      return await client.get(uri).timeout(timeout);
+    } on TimeoutException {
+      throw NetworkException();
+    } on SocketException {
+      throw NetworkException();
+    } on http.ClientException {
+      throw NetworkException();
+    }
+  }
+
+  static Future<Product> lookupBarcode(String barcode) async {
+    if (!isValidBarcode(barcode)) throw InvalidBarcodeException();
+    final response = await _get(Uri.parse('$baseUrl/barcode/$barcode'), const Duration(seconds: 30));
+
+    switch (response.statusCode) {
+      case 200:
+        try {
+          final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+          return Product.fromJson(data);
+        } on FormatException {
+          throw ServerException(response.statusCode);
+        } on TypeError {
+          throw ServerException(response.statusCode);
+        }
+      case 400:
+        throw InvalidBarcodeException();
+      case 404:
+        throw ProductNotFoundException();
+      case 429:
+        throw RateLimitException();
+      default:
+        throw ServerException(response.statusCode);
     }
   }
 }
@@ -39,35 +95,31 @@ class LookupResult {
 }
 
 class LookupService {
-  /// Barkod sorgula — online dener, başarılıysa cache'ler;
-  /// internet yoksa veya rate limit dolarsa cache'ten döndürür.
+  /// Barkod sorgula — online dener, başarılıysa cache'ler; internet yoksa,
+  /// sunucu yanıt vermiyorsa veya rate limit dolduysa cache'ten döndürür.
+  /// Ürün gerçekten yoksa ([ProductNotFoundException]) ya da barkod geçersizse
+  /// cache'e bakılmaz — hata olduğu gibi yukarı çıkar.
   static Future<LookupResult> lookup(String barcode) async {
     try {
       final product = await ApiService.lookupBarcode(barcode);
-      // Başarılı — cache'le (fire-and-forget, bekletme)
-      DatabaseService.cacheProduct(product).then((_) => DatabaseService.trimCache());
+      // Başarılı — cache'le (fire-and-forget; cache hatası sorguyu bozmasın)
+      DatabaseService.cacheProduct(product)
+          .then((_) => DatabaseService.trimCache())
+          .catchError((Object e) => debugPrint('Cache yazılamadı: $e'));
       return LookupResult(product: product, fromCache: false);
-    } catch (e) {
-      // 404 (ürün yok) ile geçici hataları ayır:
-      // ürün yoksa cache'te de yoktur — exception fırlat
-      final msg = e.toString();
-      final isRateLimit = e is RateLimitException || msg.contains('RateLimitException');
-      final isNetworkError = msg.contains('SocketException') ||
-          msg.contains('TimeoutException') ||
-          msg.contains('timed out') ||
-          msg.contains('Failed host lookup') ||
-          msg.contains('Connection');
-
-      if (!isRateLimit && !isNetworkError) rethrow;
-
-      // Geçici hata (network / rate limit) — cache dene
-      final cached = await DatabaseService.getCachedProduct(barcode);
-      if (cached != null) {
-        return LookupResult(product: cached, fromCache: true);
-      }
-      if (isRateLimit) throw RateLimitException();
-      rethrow; // cache'te de yoksa hatayı yukselt
+    } on NetworkException {
+      return _fromCacheOr(barcode, NetworkException());
+    } on RateLimitException {
+      return _fromCacheOr(barcode, RateLimitException());
+    } on ServerException catch (e) {
+      return _fromCacheOr(barcode, e);
     }
+  }
+
+  static Future<LookupResult> _fromCacheOr(String barcode, Exception error) async {
+    final cached = await DatabaseService.getCachedProduct(barcode);
+    if (cached != null) return LookupResult(product: cached, fromCache: true);
+    throw error;
   }
 }
 
@@ -88,26 +140,32 @@ class SearchResult {
   /// Nutri-Score harfine göre renk (ürün detayiyle aynı palet)
   Color get nutriscoreColor {
     switch (nutriscore?.toUpperCase()) {
-      case 'A': return const Color(0xFF038141);
-      case 'B': return const Color(0xFF85BB2F);
-      case 'C': return const Color(0xFFFECB02);
-      case 'D': return const Color(0xFFEE8100);
-      case 'E': return const Color(0xFFE63E11);
-      default: return const Color(0xFF64748B);
+      case 'A':
+        return const Color(0xFF038141);
+      case 'B':
+        return const Color(0xFF85BB2F);
+      case 'C':
+        return const Color(0xFFFECB02);
+      case 'D':
+        return const Color(0xFFEE8100);
+      case 'E':
+        return const Color(0xFFE63E11);
+      default:
+        return const Color(0xFF64748B);
     }
   }
 }
 
 class SearchService {
-  static const String baseUrl = ApiService.baseUrl;
-
   /// Ürün adına göre ara (min 2 karakter). Barkod bilinmediğinde kullanılır.
-  /// 429 (rate limit) geldiğinde boş liste yerine RateLimitException fırlatır
-  /// ki arayüz "sonuç yok" ile "çok hızlı istek"i ayırt edebilsin.
+  /// 429'da [RateLimitException], bağlantı yoksa [NetworkException], sunucu
+  /// hatasında [ServerException] fırlatır; böylece arayüz "sonuç yok" ile
+  /// "arama yapılamadı"yı ayırt edebilir.
   static Future<List<SearchResult>> search(String query, {int limit = 10}) async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/search?q=${Uri.encodeComponent(query)}&limit=$limit'))
-        .timeout(const Duration(seconds: 15));
+    final response = await ApiService._get(
+      Uri.parse('${ApiService.baseUrl}/search?q=${Uri.encodeComponent(query)}&limit=$limit'),
+      const Duration(seconds: 15),
+    );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -115,8 +173,10 @@ class SearchService {
       return list.map((e) => SearchResult.fromJson(e as Map<String, dynamic>)).toList();
     } else if (response.statusCode == 429) {
       throw RateLimitException();
-    } else {
+    } else if (response.statusCode == 400) {
       return [];
+    } else {
+      throw ServerException(response.statusCode);
     }
   }
 }
