@@ -68,6 +68,13 @@ void main() {
     expect(ApiService.isValidBarcode('1234567'), isFalse);
   });
 
+  test('aramadan gelen yerel kimlik (LOC + 12 hex) kabul edilir', () {
+    expect(ApiService.isValidBarcode('LOC033758d59457'), isTrue);
+    expect(ApiService.isLocalId('LOC033758d59457'), isTrue);
+    expect(ApiService.isValidBarcode('LOC123'), isFalse);
+    expect(ApiService.isLocalId('8690504040248'), isFalse);
+  });
+
   test('arama sunucu hatasında ServerException fırlatır (boş liste değil)', () async {
     useResponse((_) => http.Response('Internal Server Error', 500));
     expect(SearchService.search('nutella'), throwsA(isA<ServerException>()));

@@ -54,6 +54,9 @@ class NutriBreakdown {
   final double? sodium;     final int? sodiumPts;
   final double? proteins;   final int? proteinsPts;
   final double? fiber;      final int? fiberPts;
+  // Nutri-Score 2023: meyve/sebze/baklagil oranı (%) ve tatlandırıcı cezası
+  final double? fruitsVegLegumes; final int? fruitsVegLegumesPts;
+  final int? sweetenersPts;
 
   NutriBreakdown({
     this.energy, this.energyPts,
@@ -62,11 +65,19 @@ class NutriBreakdown {
     this.sodium, this.sodiumPts,
     this.proteins, this.proteinsPts,
     this.fiber, this.fiberPts,
+    this.fruitsVegLegumes, this.fruitsVegLegumesPts,
+    this.sweetenersPts,
   });
 
   factory NutriBreakdown.fromJson(Map<String, dynamic> j) {
-    double? val(String key) => (j[key]?['value'] as num?)?.toDouble();
-    int? pts(String key) => (j[key]?['points'] as num?)?.toInt();
+    double? val(String key) {
+      final v = j[key]?['value'];
+      return v is num ? v.toDouble() : null;
+    }
+    int? pts(String key) {
+      final v = j[key]?['points'];
+      return v is num ? v.toInt() : null;
+    }
     return NutriBreakdown(
       energy: val('energy'),         energyPts: pts('energy'),
       sugars: val('sugars'),         sugarsPts: pts('sugars'),
@@ -74,8 +85,22 @@ class NutriBreakdown {
       sodium: val('sodium'),         sodiumPts: pts('sodium'),
       proteins: val('proteins'),     proteinsPts: pts('proteins'),
       fiber: val('fiber'),           fiberPts: pts('fiber'),
+      fruitsVegLegumes: val('fruits_vegetables_legumes'),
+      fruitsVegLegumesPts: pts('fruits_vegetables_legumes'),
+      sweetenersPts: pts('sweeteners'),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'energy':       {'value': energy, 'points': energyPts},
+    'sugars':       {'value': sugars, 'points': sugarsPts},
+    'saturated_fat':{'value': saturatedFat, 'points': saturatedFatPts},
+    'sodium':       {'value': sodium, 'points': sodiumPts},
+    'proteins':     {'value': proteins, 'points': proteinsPts},
+    'fiber':        {'value': fiber, 'points': fiberPts},
+    'fruits_vegetables_legumes': {'value': fruitsVegLegumes, 'points': fruitsVegLegumesPts},
+    'sweeteners':   {'points': sweetenersPts},
+  };
 }
 
 class Product {
@@ -89,11 +114,20 @@ class Product {
   final String? nutriscoreGrade;
   final int? nutriscorePoints;
   final NutriBreakdown? nutriBreakdown;
+  /// "official" (Open Food Facts'in hesabı) / "computed" (backend hesabı)
+  final String? nutriscoreSource;
+  /// general / beverage / water / cheese / fat_oil_nuts_seeds / red_meat
+  final String? nutriscoreCategory;
+  /// Not yoksa nedeni: not_applicable / missing / implausible
+  final String? nutriscoreUnavailableReason;
 
   // İçerikler
   final List<String>? allIngredients;
   final List<RiskIngredient>? foundRisks;
+  /// Tüm alerjenler (eser miktar uyarıları dahil)
   final List<String>? allergens;
+  /// [allergens] içinden yalnızca "eser miktarda içerebilir" olanlar
+  final List<String> allergenTraces;
   final bool criticalSafetyRule;
 
   // Porsiyon/Paket bilgisi (v2.1.0)
@@ -117,9 +151,13 @@ class Product {
     this.nutriscoreGrade,
     this.nutriscorePoints,
     this.nutriBreakdown,
+    this.nutriscoreSource,
+    this.nutriscoreCategory,
+    this.nutriscoreUnavailableReason,
     this.allIngredients,
     this.foundRisks,
     this.allergens,
+    this.allergenTraces = const [],
     this.criticalSafetyRule = false,
     this.productQuantity = 0,
     this.servingQuantity = 0,
@@ -129,6 +167,10 @@ class Product {
     this.quantityUnit = 'g',
     this.dataSource = '',
   });
+
+  /// Ürünün kesin içerdiği alerjenler (eser miktar uyarıları hariç)
+  List<String> get allergensContained =>
+      (allergens ?? const []).where((a) => !allergenTraces.contains(a)).toList();
 
   /// Porsiyon modu kullanılabilir mi? (serving_quantity > 0)
   bool get hasServing => servingQuantity > 0;
@@ -152,6 +194,8 @@ class Product {
     // allergens listesi
     final allergensRaw = json['allergens'] as List<dynamic>?;
     final allergens = allergensRaw?.map((e) => e.toString()).toList();
+    final tracesRaw = json['allergen_traces'];
+    final traces = tracesRaw is List ? tracesRaw.map((e) => e.toString()).toList() : <String>[];
 
     return Product(
       barcode: json['barcode'] ?? json['code'] ?? '',
@@ -162,9 +206,13 @@ class Product {
       nutriscoreGrade: nutriScore?['grade'] as String?,
       nutriscorePoints: (nutriScore?['points'] as num?)?.toInt(),
       nutriBreakdown: breakdown != null ? NutriBreakdown.fromJson(breakdown) : null,
+      nutriscoreSource: nutriScore?['source'] as String?,
+      nutriscoreCategory: nutriScore?['category'] as String?,
+      nutriscoreUnavailableReason: nutriScore?['unavailable_reason'] as String?,
       allIngredients: ingredients,
       foundRisks: risks,
       allergens: allergens,
+      allergenTraces: traces,
       criticalSafetyRule: json['critical_safety_rule'] ?? false,
       // Porsiyon/paket (v2.1.0)
       productQuantity: (json['product_quantity'] as num?)?.toDouble() ?? 0,

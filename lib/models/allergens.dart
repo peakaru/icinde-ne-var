@@ -11,10 +11,13 @@ class Allergens {
     'soya': '🫘 Soya',
     'kuruyemiş': '🥜 Kuruyemiş',
     'balık': '🐟 Balık',
+    'kabuklu': '🦐 Kabuklu deniz ürünleri',
+    'yumuşakça': '🦑 Yumuşakçalar',
     'susam': '🍯 Susam',
     'hardal': '🌭 Hardal',
     'kereviz': '🥬 Kereviz',
     'sülfit': '🍷 Sülfit',
+    'lupin': '🌼 Acı bakla (lupin)',
   };
 
   static const Map<String, String> _en = {
@@ -24,10 +27,13 @@ class Allergens {
     'soya': '🫘 Soy',
     'kuruyemiş': '🥜 Nuts',
     'balık': '🐟 Fish',
+    'kabuklu': '🦐 Crustaceans',
+    'yumuşakça': '🦑 Molluscs',
     'susam': '🍯 Sesame',
     'hardal': '🌭 Mustard',
     'kereviz': '🥬 Celery',
     'sülfit': '🍷 Sulphites',
+    'lupin': '🌼 Lupin',
   };
 
   /// Seçim listeleri için anahtar → etiket haritası.

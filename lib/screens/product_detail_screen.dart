@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/allergens.dart';
 import '../models/product.dart';
+import '../services/api_service.dart';
 import '../services/compare_store.dart';
 import '../services/database_service.dart';
 import 'compare_screen.dart';
@@ -29,6 +30,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   // besinler tamamen bos/0 ise gida disi urun olabilir -> NS/besin gizle
   bool get _hasNutri {
     final nb = widget.product.nutriBreakdown;
+    // Değer var ama not verilemedi (uygulanmaz / tutarsız): kart nedeni gösterir
+    final reason = widget.product.nutriscoreUnavailableReason;
+    if (reason == 'not_applicable' || reason == 'implausible') return true;
     return nb == null ||
         (nb.energy ?? 0) != 0 ||
         (nb.sugars ?? 0) != 0 ||
@@ -210,7 +214,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ],
               const SizedBox(height: 6),
               Row(children: [
-                Text(p.barcode, style: const TextStyle(color: Colors.white38, fontSize: 13)),
+                Text(
+                    ApiService.isLocalId(p.barcode)
+                        ? (_lang == 'tr' ? 'Barkodu kayıtlı değil' : 'No barcode on record')
+                        : p.barcode,
+                    style: const TextStyle(color: Colors.white38, fontSize: 13)),
                 if (p.dataSource.isNotEmpty) ...[
                   const SizedBox(width: 10),
                   Container(
@@ -341,6 +349,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           style: const TextStyle(color: Colors.white54, fontSize: 14)),
                     const SizedBox(height: 12),
                     _NutriScaleBar(grade: p.nutriscoreGrade),
+                    if (p.nutriscoreGrade == null && p.nutriscoreUnavailableReason != null) ...[
+                      const SizedBox(height: 10),
+                      Text(_unavailableText(p.nutriscoreUnavailableReason!),
+                          style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.4)),
+                    ] else if (p.nutriscoreGrade != null && p.nutriscoreSource != null) ...[
+                      const SizedBox(height: 10),
+                      Text(_sourceText(p.nutriscoreSource!),
+                          style: const TextStyle(color: Colors.white38, fontSize: 11, height: 1.4)),
+                    ],
                   ],
                 )),
               ]),
@@ -616,18 +633,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   style: const TextStyle(color: Color(0xFFF43F5E), fontSize: 11, letterSpacing: 1.5, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8, runSpacing: 8,
-                  children: p.allergens!.map((a) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF43F5E).withValues(alpha: 0.15),
-                      border: Border.all(color: const Color(0xFFF43F5E).withValues(alpha: 0.4)),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(Allergens.label(a, _lang), style: const TextStyle(color: Color(0xFFF43F5E), fontSize: 13)),
-                  )).toList(),
-                ),
+                if (p.allergensContained.isNotEmpty)
+                  _allergenChips(p.allergensContained, const Color(0xFFF43F5E)),
+                if (p.allergenTraces.isNotEmpty) ...[
+                  if (p.allergensContained.isNotEmpty) const SizedBox(height: 14),
+                  Text(
+                    _lang == 'tr'
+                        ? 'Eser miktarda içerebilir (aynı tesiste işlenen ürünlerden bulaşma riski)'
+                        : 'May contain traces (cross-contamination risk)',
+                    style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  _allergenChips(p.allergenTraces, const Color(0xFFF59E0B)),
+                ],
               ]),
               const SizedBox(height: 16),
             ],
@@ -653,6 +671,56 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ),
       ),
     );
+  }
+
+  String _unavailableText(String reason) {
+    final tr = _lang == 'tr';
+    switch (reason) {
+      case 'not_applicable':
+        return tr
+            ? 'Nutri-Score bu ürün grubuna uygulanmaz (alkollü içecek, bebek gıdası, takviye, tuz, baharat, sirke vb.).'
+            : 'Nutri-Score does not apply to this product group (alcohol, baby food, supplements, salt, spices, vinegar, etc.).';
+      case 'missing':
+        return tr
+            ? 'Besin değerlerinden bazıları (enerji, şeker, doymuş yağ, tuz, protein) eksik olduğu için not hesaplanmadı.'
+            : 'Not graded: some nutrition values (energy, sugars, saturated fat, salt, protein) are missing.';
+      default:
+        return tr
+            ? 'Kayıtlı besin değerleri tutarsız görünüyor (ör. porsiyon başına girilmiş), bu yüzden not hesaplanmadı.'
+            : 'Not graded: the recorded nutrition values look inconsistent (e.g. entered per serving).';
+    }
+  }
+
+  String _sourceText(String source) {
+    final tr = _lang == 'tr';
+    if (source == 'official') {
+      return tr ? 'Kaynak: Open Food Facts (Nutri-Score 2023)' : 'Source: Open Food Facts (Nutri-Score 2023)';
+    }
+    return tr
+        ? 'Nutri-Score 2023 algoritmasıyla etiket değerlerinden hesaplandı'
+        : 'Calculated from label values with the Nutri-Score 2023 algorithm';
+  }
+
+  String? _categoryNote(String? category) {
+    final tr = _lang == 'tr';
+    switch (category) {
+      case 'beverage':
+        return tr
+            ? 'İçecekler için daha sıkı eşikler kullanılır; tatlandırıcı +4 puan ekler.'
+            : 'Beverages use stricter thresholds; non-nutritive sweeteners add 4 points.';
+      case 'water':
+        return tr ? 'Sade su her zaman A alır.' : 'Plain water is always graded A.';
+      case 'cheese':
+        return tr ? 'Peynirde protein her zaman hesaba katılır.' : 'For cheese, protein always counts.';
+      case 'fat_oil_nuts_seeds':
+        return tr
+            ? 'Yağ, kuruyemiş ve tohumlarda enerji yerine doymuş yağdan gelen enerji, doymuş yağ yerine doymuş yağ oranı puanlanır.'
+            : 'For fats, oils, nuts and seeds, energy from saturated fat and the saturated-fat ratio are scored instead.';
+      case 'red_meat':
+        return tr ? 'Kırmızı etli ürünlerde protein en fazla 2 puan düşürür.' : 'For red meat products, protein counts at most 2 points.';
+      default:
+        return null;
+    }
   }
 
   String _nutriscoreLabel(String? grade) {
@@ -716,51 +784,76 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     return list;
   }
 
-  /// Kullanıcının alerjen profiliyle ürünün alerjenleri kesişiyorsa kırmızı uyarı
+  Widget _allergenChips(List<String> keys, Color color) => Wrap(
+        spacing: 8, runSpacing: 8,
+        children: keys.map((a) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(Allergens.label(a, _lang), style: TextStyle(color: color, fontSize: 13)),
+        )).toList(),
+      );
+
+  /// Kullanıcının alerjen profiliyle kesişme: içeriyorsa kırmızı, yalnızca
+  /// eser miktarda içerebiliyorsa turuncu uyarı (ikisi de gösterilir)
   List<Widget> _buildAllergenAlert(Product p) {
     if (_userAllergens.isEmpty || p.allergens == null) return [];
-    final matches = p.allergens!
-        .where((a) => _userAllergens.contains(a.toLowerCase().trim()))
-        .toSet()
-        .toList();
-    if (matches.isEmpty) return [];
+    bool mine(String a) => _userAllergens.contains(a.toLowerCase().trim());
+    final contained = p.allergensContained.where(mine).toSet().toList();
+    final traces = p.allergenTraces.where(mine).toSet().toList();
+    final isTr = _lang == 'tr';
     return [
-      const SizedBox(height: 12),
-      Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFDC2626).withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFDC2626), width: 1.5),
+      if (contained.isNotEmpty)
+        ..._alertBox(
+          contained,
+          const Color(0xFFDC2626),
+          const Color(0xFFFCA5A5),
+          isTr ? 'ALERJEN UYARISI — bu ürün senin alerjenlerini içeriyor!'
+               : 'ALLERGEN ALERT — contains your allergens!',
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Icon(Icons.no_accounts_rounded, color: Color(0xFFFCA5A5), size: 26),
-            const SizedBox(width: 10),
-            Expanded(child: Text(
-              _lang == 'tr'
-                  ? 'ALERJEN UYARISI — bu ürün senin alerjenlerini içeriyor!'
-                  : 'ALLERGEN ALERT — contains your allergens!',
-              style: const TextStyle(color: Color(0xFFFCA5A5), fontWeight: FontWeight.w800, fontSize: 14),
-            )),
-          ]),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8, runSpacing: 8,
-            children: matches.map((m) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFDC2626),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(Allergens.label(m, _lang),
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
-            )).toList(),
-          ),
-        ]),
-      ),
+      if (traces.isNotEmpty)
+        ..._alertBox(
+          traces,
+          const Color(0xFFD97706),
+          const Color(0xFFFCD34D),
+          isTr ? 'DİKKAT — senin alerjenlerinden eser miktarda içerebilir'
+               : 'CAUTION — may contain traces of your allergens',
+        ),
     ];
   }
+
+  List<Widget> _alertBox(List<String> keys, Color color, Color textColor, String title) => [
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color, width: 1.5),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(Icons.no_accounts_rounded, color: textColor, size: 26),
+              const SizedBox(width: 10),
+              Expanded(child: Text(title,
+                  style: TextStyle(color: textColor, fontWeight: FontWeight.w800, fontSize: 14))),
+            ]),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8, runSpacing: 8,
+              children: keys.map((m) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
+                child: Text(Allergens.label(m, _lang),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+              )).toList(),
+            ),
+          ]),
+        ),
+      ];
 
   void _showNutriInfo(BuildContext context) {
     final isTr = _lang == 'tr';
@@ -829,15 +922,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   style: const TextStyle(color: Color(0xFFF43F5E), fontWeight: FontWeight.w700, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
+                if (_categoryNote(widget.product.nutriscoreCategory) != null) ...[
+                  Text(_categoryNote(widget.product.nutriscoreCategory)!,
+                      style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.4)),
+                  const SizedBox(height: 10),
+                ],
                 _BreakdownRow(
-                  label: isTr ? 'Enerji' : 'Energy',
-                  value: widget.product.nutriBreakdown!.energy,
+                  label: widget.product.nutriscoreCategory == 'fat_oil_nuts_seeds'
+                      ? (isTr ? 'Doymuş yağdan enerji' : 'Energy from sat. fat')
+                      : (isTr ? 'Enerji' : 'Energy'),
+                  // yağ grubunda puan toplam enerjiden değil, doymuş yağdan
+                  // gelen enerjiden; toplam kcal'i yanında göstermek yanıltır
+                  value: widget.product.nutriscoreCategory == 'fat_oil_nuts_seeds'
+                      ? null
+                      : widget.product.nutriBreakdown!.energy,
                   unit: 'kcal',
                   points: widget.product.nutriBreakdown!.energyPts,
                   isNegative: true,
                 ),
                 _BreakdownRow(
-                  label: isTr ? 'Doymuş Yağ' : 'Saturated Fat',
+                  label: widget.product.nutriscoreCategory == 'fat_oil_nuts_seeds'
+                      ? (isTr ? 'Doymuş yağ (oranı)' : 'Sat. fat (ratio)')
+                      : (isTr ? 'Doymuş Yağ' : 'Saturated Fat'),
                   value: widget.product.nutriBreakdown!.saturatedFat,
                   unit: 'g',
                   points: widget.product.nutriBreakdown!.saturatedFatPts,
@@ -857,6 +963,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   points: widget.product.nutriBreakdown!.sodiumPts,
                   isNegative: true,
                 ),
+                if ((widget.product.nutriBreakdown!.sweetenersPts ?? 0) > 0)
+                  _BreakdownRow(
+                    label: isTr ? 'Tatlandırıcı' : 'Sweeteners',
+                    value: null,
+                    unit: '',
+                    points: widget.product.nutriBreakdown!.sweetenersPts,
+                    isNegative: true,
+                  ),
 
                 const SizedBox(height: 16),
 
@@ -878,6 +992,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   value: widget.product.nutriBreakdown!.fiber,
                   unit: 'g',
                   points: widget.product.nutriBreakdown!.fiberPts,
+                  isNegative: false,
+                ),
+                _BreakdownRow(
+                  label: isTr ? 'Meyve/sebze/baklagil' : 'Fruit/veg/legumes',
+                  value: widget.product.nutriBreakdown!.fruitsVegLegumes,
+                  unit: '%',
+                  points: widget.product.nutriBreakdown!.fruitsVegLegumesPts,
                   isNegative: false,
                 ),
 

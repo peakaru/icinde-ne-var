@@ -25,6 +25,6 @@ void main() {
   test('etiket çevirisi ve bilinmeyen anahtar', () {
     expect(Allergens.label('süt', 'en'), contains('Milk'));
     expect(Allergens.label(' SÜT ', 'tr'), contains('Süt'));
-    expect(Allergens.label('lupin', 'en'), 'lupin');
+    expect(Allergens.label('bilinmeyen', 'en'), 'bilinmeyen');
   });
 }

@@ -45,8 +45,12 @@ class ApiService {
   @visibleForTesting
   static http.Client client = http.Client();
 
-  /// Backend'in kabul ettiği barkod formatı (EAN-8 … GTIN-14)
-  static bool isValidBarcode(String code) => RegExp(r'^\d{8,14}$').hasMatch(code);
+  /// Backend'in kabul ettiği barkod formatı (EAN-8 … GTIN-14) ya da barkodu
+  /// bilinmeyen market ürünlerinin yerel kimliği (LOC + 12 hex, aramadan gelir)
+  static bool isValidBarcode(String code) =>
+      RegExp(r'^\d{8,14}$').hasMatch(code) || isLocalId(code);
+
+  static bool isLocalId(String code) => RegExp(r'^LOC[0-9a-f]{12}$').hasMatch(code);
 
   /// GET isteği; bağlantı hatalarını [NetworkException]'a çevirir.
   static Future<http.Response> _get(Uri uri, Duration timeout) async {

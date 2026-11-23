@@ -77,18 +77,18 @@ class DatabaseService {
     'brand': p.brand,
     'image_url': p.imageUrl,
     'data_warning': p.dataWarning,
-    'nutri_score': p.nutriscoreGrade == null ? null : {
-      'grade': p.nutriscoreGrade,
-      'points': p.nutriscorePoints,
-      'breakdown': p.nutriBreakdown == null ? null : {
-        'energy':       {'value': p.nutriBreakdown!.energy, 'points': p.nutriBreakdown!.energyPts},
-        'sugars':       {'value': p.nutriBreakdown!.sugars, 'points': p.nutriBreakdown!.sugarsPts},
-        'saturated_fat':{'value': p.nutriBreakdown!.saturatedFat, 'points': p.nutriBreakdown!.saturatedFatPts},
-        'sodium':       {'value': p.nutriBreakdown!.sodium, 'points': p.nutriBreakdown!.sodiumPts},
-        'proteins':     {'value': p.nutriBreakdown!.proteins, 'points': p.nutriBreakdown!.proteinsPts},
-        'fiber':        {'value': p.nutriBreakdown!.fiber, 'points': p.nutriBreakdown!.fiberPts},
-      },
-    },
+    // Not hesaplanamasa da besin değerleri ve nedeni saklansın
+    'nutri_score': (p.nutriscoreGrade == null && p.nutriBreakdown == null &&
+            p.nutriscoreUnavailableReason == null)
+        ? null
+        : {
+            'grade': p.nutriscoreGrade,
+            'points': p.nutriscorePoints,
+            'breakdown': p.nutriBreakdown?.toJson(),
+            'source': p.nutriscoreSource,
+            'category': p.nutriscoreCategory,
+            'unavailable_reason': p.nutriscoreUnavailableReason,
+          },
     'found_risks': p.foundRisks?.map((r) => {
       'name': r.name,
       'name_en': r.nameEn,
@@ -101,6 +101,7 @@ class DatabaseService {
       'source_en': r.sourceEn,
     }).toList(),
     'allergens': p.allergens,
+    'allergen_traces': p.allergenTraces,
     'all_ingredients': p.allIngredients,
     'critical_safety_rule': p.criticalSafetyRule,
     // Porsiyon/paket bilgisi (geçmişten bakınca toggle çalışsın)
