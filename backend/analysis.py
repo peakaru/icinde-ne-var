@@ -172,7 +172,7 @@ _FLAVOUR_PHRASE = re.compile(r"\b\w+(?:\s*(?:&|ve|-|,)\s*\w+)*\s+(?:aromali|arom
 def energy_check_applies(source: Optional[str]) -> bool:
     """Porsiyon başı veri sorunu market kazıma kaynaklarında sistematik; Open
     Food Facts verisinde bu kontrol fazla yanlış alarm verdiği için uygulanmaz."""
-    return source in ("getir", "carrefour")
+    return source in ("getir", "carrefour", "migros")
 
 
 def energy_implausible_for_name(name: str, energy_kcal: Optional[float]) -> bool:

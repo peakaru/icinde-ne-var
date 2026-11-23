@@ -359,6 +359,9 @@ class NutriScoreTest(unittest.TestCase):
         self.assertIsNone(evaluate_nutri_score("Portakal Aromalı Çikolata", n, data_source="getir").grade)
         # Fındık ezmesi 116 kcal: porsiyon başı (gerçek ~630)
         self.assertIsNone(evaluate_nutri_score("Fiskobirlik Fındık Ezmesi", n, data_source="getir").grade)
+        # Migros da porsiyon değerini 100 g diye yazabiliyor (Nestle 1927 Gofret 28 G: 138 kcal)
+        self.assertIsNone(evaluate_nutri_score("Nestle 1927 Sütlü Çikolatalı Gofret", n,
+                                               data_source="migros").grade)
 
     def test_not_applicable(self):
         n = Nutrients(energy_kcal=43, sugars=0, saturated_fat=0, sodium_mg=4, proteins=0.5)

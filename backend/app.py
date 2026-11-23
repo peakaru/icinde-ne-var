@@ -383,9 +383,9 @@ def _local_nutrients(row: dict) -> Nutrients:
     """Parquet satırından besin değerleri (100 g/ml). Bilinmeyen None kalır.
 
     'manual' kaynağında sütunlar kaymış (şeker ile doymuş yağ yer değiştirmiş,
-    lif sütununda mg cinsinden sodyum, bazı enerjiler kJ). Bu kayıtların besin
-    değerleri doğrulanana kadar kullanılmaz; yanlış değer göstermektense hiç
-    göstermemek daha doğru.
+    lif sütununda mg cinsinden sodyum, bazı enerjiler kJ). Onarılan Migros
+    verisi 'migros' etiketiyle gelir; 'manual' olarak kalan kayıtların besin
+    değerleri kullanılmaz: yanlış değer göstermektense hiç göstermemek daha doğru.
     """
     if (row.get("source") or "") == "manual":
         return Nutrients()
