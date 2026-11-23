@@ -23,4 +23,18 @@ class CompareStore {
       _items.removeWhere((p) => p.barcode == barcode);
 
   static void clear() => _items.clear();
+
+  /// Nutri-Score'u daha iyi olan ürün; notlar eşitse ya da biri bilinmiyorsa
+  /// null (kazanan yok). Bilinmeyen not hiçbir zaman "daha sağlıklı" sayılmaz.
+  static Product? healthier(Product a, Product b) {
+    final ai = _gradeIndex(a.nutriscoreGrade);
+    final bi = _gradeIndex(b.nutriscoreGrade);
+    if (ai == null || bi == null || ai == bi) return null;
+    return ai < bi ? a : b;
+  }
+
+  static int? _gradeIndex(String? grade) {
+    final i = 'ABCDE'.indexOf((grade ?? '').toUpperCase());
+    return (grade == null || grade.isEmpty || i < 0) ? null : i;
+  }
 }

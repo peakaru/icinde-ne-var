@@ -29,18 +29,18 @@ class _CompareScreenState extends State<CompareScreen> {
     'D': Color(0xFFEE8100), 'E': Color(0xFFE63E11),
   };
 
-  static int _gradeIdx(String? g) => 'ABCDE'.indexOf((g ?? '?').toUpperCase());
-
   @override
   Widget build(BuildContext context) {
     final items = CompareStore.items;
+    // Sepet temizlenip ekran kapanırken yeniden çizilirse items[1] patlamasın
+    if (items.length < 2) {
+      return const Scaffold(backgroundColor: Color(0xFF0D1F1A));
+    }
     final a = items[0];
     final b = items[1];
 
-    // Daha sağlıklı: NS harfi önde olan (A=0 en iyi)
-    final aIdx = _gradeIdx(a.nutriscoreGrade);
-    final bIdx = _gradeIdx(b.nutriscoreGrade);
-    final winner = aIdx < bIdx ? a : (bIdx < aIdx ? b : null);
+    // Daha sağlıklı: NS harfi önde olan (A en iyi); notu bilinmeyen kazanamaz
+    final winner = CompareStore.healthier(a, b);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1F1A),
