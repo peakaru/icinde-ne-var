@@ -17,13 +17,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 import httpx
 from analysis import (
-    ProductFeatures,
+    Nutrients,
     analyze_ingredients,
-    calculate_nutri_score_2024,
-    detect_allergens,
-    fvln_tahmin,
+    allergen_info,
+    evaluate_nutri_score,
     is_beverage,
     normalize_sodium_mg,
+    nutri_score_from_off,
     _tr_norm,
 )
 # HF ZeroGPU için zorunlu — GPU function bekliyor
@@ -33,7 +33,7 @@ try:
 except ImportError:
     _SPACES_AVAILABLE = False
 
-app = FastAPI(title="İçinde Ne Var API", version="3.1.0")
+app = FastAPI(title="İçinde Ne Var API", version="3.2.0")
 
 
 # ZeroGPU dummy function — HF ZeroGPU Space bir @spaces.GPU decorator bekliyor.
@@ -363,6 +363,42 @@ def get_product_from_db(barcode: str):
     return None
 
 
+OFF_USER_AGENT = "IcindeNeVar-API/3.2"
+# Barkodu bilinmeyen market ürünlerine pipeline'ın verdiği kimlik
+_LOCAL_ID = re.compile(r"LOC[0-9a-f]{12}")
+
+
+def _num(v) -> Optional[float]:
+    """Sayıya çevir; boş, NaN ya da sayı olmayan değer None."""
+    if v is None or isinstance(v, bool):
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if f == f else None
+
+
+def _local_nutrients(row: dict) -> Nutrients:
+    """Parquet satırından besin değerleri (100 g/ml). Bilinmeyen None kalır.
+
+    'manual' kaynağında sütunlar kaymış (şeker ile doymuş yağ yer değiştirmiş,
+    lif sütununda mg cinsinden sodyum, bazı enerjiler kJ). Bu kayıtların besin
+    değerleri doğrulanana kadar kullanılmaz; yanlış değer göstermektense hiç
+    göstermemek daha doğru.
+    """
+    if (row.get("source") or "") == "manual":
+        return Nutrients()
+    return Nutrients(
+        energy_kcal=_num(row.get("energy-kcal_100g")),
+        sugars=_num(row.get("sugars_100g")),
+        saturated_fat=_num(row.get("saturated-fat_100g")),
+        sodium_mg=normalize_sodium_mg(row.get("sodium_100g")),
+        proteins=_num(row.get("proteins_100g")),
+        fiber=_num(row.get("fiber_100g")),
+    )
+
+
 async def get_product_from_off(barcode: str, caller_ip: str = "unknown"):
     """Open Food Facts API'den ürün bilgisi al.
     IP başına dakikada 10 OFF araması: rastgele barkod yağdıran kazıyıcılar
@@ -374,7 +410,8 @@ async def get_product_from_off(barcode: str, caller_ip: str = "unknown"):
     _off_map[caller_ip].append(now)
     url = f"https://world.openfoodfacts.org/api/v2/product/{barcode}.json"
     try:
-        async with httpx.AsyncClient() as client:
+        # OFF, istemcilerin kendini User-Agent ile tanıtmasını istiyor
+        async with httpx.AsyncClient(headers={"User-Agent": OFF_USER_AGENT}) as client:
             response = await client.get(url, timeout=10)
             if response.status_code == 200:
                 data = response.json()
@@ -447,11 +484,13 @@ def search_products(q: str, limit: int = 10):
                 f"""
                 SELECT code, product_name, brands, ingredients_text,
                        "energy-kcal_100g", "sugars_100g", "saturated-fat_100g",
-                       "sodium_100g", "proteins_100g", "fiber_100g"
+                       "sodium_100g", "proteins_100g", "fiber_100g",
+                       additives_tags, source
                 FROM (
                   SELECT code, product_name, brands, ingredients_text,
                          "energy-kcal_100g", "sugars_100g", "saturated-fat_100g",
                          "sodium_100g", "proteins_100g", "fiber_100g",
+                         additives_tags, source,
                          row_number() OVER (
                            PARTITION BY code
                            ORDER BY length(coalesce(ingredients_text, '')) DESC,
@@ -472,26 +511,14 @@ def search_products(q: str, limit: int = 10):
                 params + [f"{words[0]}%", limit],
             ).fetchall()
 
-        def _grade_for(name, en, sg, sf, na, pr, fb):
-            # Enerjisi olmayan ürünün NS'i hesaplanamaz
-            if not en:
-                return None
+        def _grade_for(row: dict):
+            # Barkod sorgusuyla aynı hesap; eksik/tutarsız veride None
             try:
-                na_mg = normalize_sodium_mg(na)
-                # Fiziksel olarak imkansız değerleri hesaba katma
-                # (25000mg: gerçek tuzlular — soya sosu ~9600, Vegeta ~22400 — görünmeli)
-                if na_mg and na_mg > 25000:
-                    na_mg = 0.0
-                f = ProductFeatures(
-                    energy_100g=float(en or 0),
-                    sugars_100g=float(sg or 0),
-                    saturated_fat_100g=float(sf or 0),
-                    sodium_100g=na_mg,
-                    proteins_100g=float(pr or 0),
-                    fiber_100g=float(fb or 0),
-                )
-                g, _, _ = calculate_nutri_score_2024(f, product_name=name or "")
-                return g
+                n = _local_nutrients(row)
+                return evaluate_nutri_score(row.get("product_name") or "", n,
+                                            row.get("ingredients_text") or "",
+                                            row.get("additives_tags"),
+                                            data_source=row.get("source")).grade
             except Exception:
                 return None
 
@@ -500,15 +527,18 @@ def search_products(q: str, limit: int = 10):
         if not rows:
             rows = _run("")
 
-        results = [
-            {
-                "barcode": code,
-                "product_name": name or "",
-                "brand": brands or "",
-                "nutriscore": _grade_for(name, en, sg, sf, na, pr, fb),
-            }
-            for code, name, brands, _ing, en, sg, sf, na, pr, fb in rows
-        ]
+        cols = ("code", "product_name", "brands", "ingredients_text", "energy-kcal_100g",
+                "sugars_100g", "saturated-fat_100g", "sodium_100g", "proteins_100g",
+                "fiber_100g", "additives_tags", "source")
+        results = []
+        for values in rows:
+            row = dict(zip(cols, values))
+            results.append({
+                "barcode": row["code"],
+                "product_name": row["product_name"] or "",
+                "brand": row["brands"] or "",
+                "nutriscore": _grade_for(row),
+            })
 
         # Benzer-ürün tekilleştirme: OFF'ta aynı ürün farklı ülkelerden
         # çok kez girilir ("Lipton ice tea" x8, her biri farklı NS ile).
@@ -538,7 +568,7 @@ def search_products(q: str, limit: int = 10):
 # ============================================================
 @app.get("/")
 def root():
-    return {"message": "İçinde Ne Var? API", "status": "running", "version": "3.1.0"}
+    return {"message": "İçinde Ne Var? API", "status": "running", "version": "3.2.0"}
 
 
 @app.get("/legal", include_in_schema=False)
@@ -580,15 +610,19 @@ async def lookup_barcode(code: str, request: Request = None):
     code = (code or "").strip()
     # OFF fallback limiti için çağıran IP
     caller_ip = client_ip(request) if request is not None else "unknown"
-    # Girdi doğrulama: sadece 8-14 hane rakam — çöp istekler OFF'ya iletilmez
-    if not code.isdigit() or not (8 <= len(code) <= 14):
+    # Girdi doğrulama: 8-14 hane rakam ya da barkodu bilinmeyen market ürünlerine
+    # verilen yerel kimlik (LOC + 12 hex; aramadan açılır). Çöp istekler OFF'a gitmez.
+    is_local_id = bool(_LOCAL_ID.fullmatch(code))
+    if not is_local_id and (not code.isdigit() or not (8 <= len(code) <= 14)):
         raise HTTPException(status_code=400, detail="Geçersiz barkod formatı")
     # 1. Önce yerel veritabanından ara
     local_product = get_product_from_db(code)
 
-    # 2. SORUN 8: OFF sadece yerel veri eksikse çağrılır
+    # 2. OFF sadece yerel veri eksikse çağrılır (yerel kimlik OFF'ta yoktur)
     off_product = None
-    if not local_product or not local_product.get("ingredients_text"):
+    if is_local_id:
+        pass
+    elif not local_product or not local_product.get("ingredients_text"):
         off_product = await get_product_from_off(code, caller_ip)
     elif local_product:
         # Yerelde besin değeri eksikse OFF'tan tamamla
@@ -602,6 +636,8 @@ async def lookup_barcode(code: str, request: Request = None):
         source = "Local Database"
     elif off_product:
         source = "Open Food Facts"
+    elif is_local_id:
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
     else:
         # Bulunamayan barkodu kaydet — "barkod kazandırma döngüsü":
         # periyodik çekip barkod→isim→LOC eşleştirmeyle DB'ye kazandıracağız.
@@ -632,73 +668,25 @@ async def lookup_barcode(code: str, request: Request = None):
             ingredients = off_product.get("ingredients_text", off_product.get("ingredients_text_tr", ""))
         image_url = off_product.get("image_url", "")
 
-    # Besin değerleri — öncelik sırası: OFF (zengin) > Local
-    energy_kcal = 0.0
-    sugars = 0.0
-    sat_fat = 0.0
-    sodium_raw = 0.0
-    proteins = 0.0
-    fiber = 0.0
+    # Besin değerleri (100 g/ml) — öncelik: OFF > yerel. Bilinmeyen değer
+    # None kalır: eksik değeri 0 saymak ürünü olduğundan sağlıklı gösterirdi.
+    local_n = _local_nutrients(local_product) if local_product else Nutrients()
+    off_nm = (off_product or {}).get("nutriments") or {}
+    off_energy = _num(off_nm.get("energy-kcal_100g"))
+    if off_energy is None and _num(off_nm.get("energy_100g")) is not None:
+        off_energy = _num(off_nm.get("energy_100g")) / 4.184   # kJ → kcal
 
-    if off_product:
-        nutrients = off_product.get("nutriments", {})
-        energy_kcal = nutrients.get("energy-kcal_100g", 0) or 0
-        if not energy_kcal and nutrients.get("energy_100g"):
-            energy_kcal = nutrients.get("energy_100g", 0) / 4.184
-        sugars = nutrients.get("sugars_100g", 0) or 0
-        sat_fat = nutrients.get("saturated-fat_100g", 0) or 0
-        sodium_raw = nutrients.get("sodium_100g", 0) or 0
-        proteins = nutrients.get("proteins_100g", 0) or 0
-        fiber = nutrients.get("fiber_100g", 0) or 0
+    def _pick(off_value, local_value):
+        return off_value if off_value is not None else local_value
 
-    # Yerel veriyi OFF'tan eksik alanları doldur
-    if local_product:
-        if not energy_kcal and local_product.get("energy-kcal_100g"):
-            energy_kcal = local_product["energy-kcal_100g"]
-        if not sugars and local_product.get("sugars_100g"):
-            sugars = local_product["sugars_100g"]
-        if not sat_fat and local_product.get("saturated-fat_100g"):
-            sat_fat = local_product["saturated-fat_100g"]
-        if not sodium_raw and local_product.get("sodium_100g"):
-            sodium_raw = local_product["sodium_100g"]
-        if not proteins and local_product.get("proteins_100g"):
-            proteins = local_product["proteins_100g"]
-        if not fiber and local_product.get("fiber_100g"):
-            fiber = local_product["fiber_100g"]
-
-    # Sodium birim normalization (BUG 1 düzeltmesi)
-    sodium_mg = normalize_sodium_mg(sodium_raw)
-
-    # Fiziksel limit doğrulaması — OFF kullanıcı girişi hatalarını ele
-    # (örn. içecekte 1960 mg/100g sodyum: deniz suyu ~1100 mg; tek hatalı
-    # alan tüm Nutri-Score'u berbat etmesin → imkansız değer hesaba katılmaz)
-    NUTRI_LIMITS = {
-        "energy": 900.0, "sugars": 100.0, "sat_fat": 100.0,
-        "sodium": 25000.0, "proteins": 90.0, "fiber": 80.0,
-    }
-    def _sane(val, key):
-        try:
-            v = float(val)
-        except (TypeError, ValueError):
-            return 0.0
-        if v < 0 or v > NUTRI_LIMITS[key]:
-            return 0.0
-        return v
-
-    energy_kcal = _sane(energy_kcal, "energy")
-    sugars = _sane(sugars, "sugars")
-    sat_fat = _sane(sat_fat, "sat_fat")
-    sodium_mg = _sane(sodium_mg, "sodium")
-    proteins = _sane(proteins, "proteins")
-    fiber = _sane(fiber, "fiber")
-
-    features = ProductFeatures(
-        energy_100g=energy_kcal,
-        sugars_100g=sugars,
-        saturated_fat_100g=sat_fat,
-        sodium_100g=sodium_mg,
-        proteins_100g=proteins,
-        fiber_100g=fiber,
+    nutrients = Nutrients(
+        energy_kcal=_pick(off_energy, local_n.energy_kcal),
+        sugars=_pick(_num(off_nm.get("sugars_100g")), local_n.sugars),
+        saturated_fat=_pick(_num(off_nm.get("saturated-fat_100g")), local_n.saturated_fat),
+        sodium_mg=_pick(normalize_sodium_mg(off_nm.get("sodium_100g")), local_n.sodium_mg),
+        proteins=_pick(_num(off_nm.get("proteins_100g")), local_n.proteins),
+        fiber=_pick(_num(off_nm.get("fiber_100g")), local_n.fiber),
+        fat=_num(off_nm.get("fat_100g")),
     )
 
     # ============================================================
@@ -711,7 +699,7 @@ async def lookup_barcode(code: str, request: Request = None):
     quantity_source = "unknown"
     quantity_unit = "g"      # UI toggle için: "g" veya "ml"
 
-    beverage = is_beverage(name)
+    beverage = is_beverage(name, nutrients.energy_kcal)
 
     if off_product:
         try:
@@ -796,15 +784,18 @@ async def lookup_barcode(code: str, request: Request = None):
     # İçerik VE besin ikisi birden yoksa erken dönüş.
     # Sadece içindekiler eksik ama besin değeri dolu ürünlerde (OFF'da sık)
     # NS + besin kartı gösterilmeye devam etsin — içerik bölümü app'te gizlenir.
-    has_nutrition = energy_kcal > 0 or sugars > 0 or sat_fat > 0 or proteins > 0
+    has_nutrition = any((v or 0) > 0 for v in (nutrients.energy_kcal, nutrients.sugars,
+                                               nutrients.saturated_fat, nutrients.proteins))
     if (not all_ingredients or len(all_ingredients.strip()) < 3) and not has_nutrition:
+        allergens, allergen_traces = allergen_info(name + " " + ingredients, off_product)
         return {
             "barcode": code,
             "product_name": name,
             "brand": brand,
             "image_url": image_url,
             "data_warning": True,
-            "allergens": detect_allergens(name + " " + ingredients),
+            "allergens": allergens,
+            "allergen_traces": allergen_traces,
             "source": source,
             # Porsiyon bilgisi (içerik olmasa bile)
             "product_quantity": product_quantity,
@@ -815,16 +806,34 @@ async def lookup_barcode(code: str, request: Request = None):
             "quantity_unit": quantity_unit,
         }
 
-    # Nutri-Score (resmi algoritma)
-    grade, points, breakdown = calculate_nutri_score_2024(
-        features,
-        fvln_pct=fvln_tahmin(all_ingredients),
-        product_name=name,
-    )
+    # Nutri-Score 2023: OFF ürünün kategori etiketleriyle kendi hesapladıysa
+    # o resmi not, yoksa aynı algoritmayla burada hesaplanır
+    nutri = nutri_score_from_off(off_product, nutrients) if off_product else None
+    if nutri is None:
+        additives = (local_product or {}).get("additives_tags") or \
+            (off_product or {}).get("additives_tags")
+        # Enerji yerel market kaydından geldiyse porsiyon-başı kontrolü uygulanır
+        energy_source = (local_product or {}).get("source") if off_energy is None else "off"
+        nutri = evaluate_nutri_score(name, nutrients, all_ingredients, additives,
+                                     data_source=energy_source)
+        # 'manual' kaydının değerleri kullanılmadıysa neden "eksik" değil "tutarsız"
+        if (nutri.unavailable_reason == "missing" and local_product
+                and local_product.get("source") == "manual"
+                and _num(local_product.get("energy-kcal_100g")) is not None):
+            nutri.unavailable_reason = "implausible"
 
     # Risk analizi
-    risks, max_ewg = analyze_ingredients(all_ingredients, get_risk_scores())
-    allergens = detect_allergens(all_ingredients + " " + name)
+    # OFF'un çok dilli katkı maddesi ayrıştırmasının sonucu metin tespitine eklenir
+    additive_tags = list((off_product or {}).get("additives_tags") or [])
+    local_tags = (local_product or {}).get("additives_tags")
+    if isinstance(local_tags, str):
+        additive_tags += [t.strip() for t in local_tags.split(",") if t.strip()]
+    risks, max_ewg = analyze_ingredients(all_ingredients, get_risk_scores(), additive_tags)
+    # Ürün adı yalnızca içerik yoksa kullanılır ("chocolate eggs" yumurta değil);
+    # OFF'un kendi alerjen etiketleri metin tespitine eklenir (hiç çıkarılmaz)
+    has_text = len((all_ingredients or "").strip()) >= 3
+    allergens, allergen_traces = allergen_info(all_ingredients if has_text else name,
+                                               off_product)
 
     # İçerik listesi parse
     ingredient_list = [i.strip() for i in re.split(r'[,;]', all_ingredients) if i.strip()]
@@ -834,10 +843,11 @@ async def lookup_barcode(code: str, request: Request = None):
         "product_name": name,
         "brand": brand,
         "image_url": image_url,
-        "nutri_score": {"grade": grade, "points": points, "breakdown": breakdown},
+        "nutri_score": nutri.to_dict(),
         "found_risks": risks,
         "critical_safety_rule": max_ewg >= 9,
         "allergens": allergens,
+        "allergen_traces": allergen_traces,
         "all_ingredients": ingredient_list,
         "source": source,
         # Porsiyon/paket bilgisi (UI toggle için)
@@ -865,7 +875,7 @@ with gr.Blocks(title="İçinde Ne Var API", theme=gr.themes.Soft()) as demo:
     gr.Markdown("- `GET /barcode/{code}` — Barkod sorgula")
     gr.Markdown("- `GET /search?q=...` — İsimle ara")
     gr.Markdown("- `GET /health` — Sağlık kontrolü")
-    gr.Markdown("- Version: 3.1.0 (Gradio mount)")
+    gr.Markdown("- Version: 3.2.0 (Gradio mount)")
 
 # FastAPI app'ine Gradio'yu mount et (root path)
 app = gr.mount_gradio_app(app, demo, path="/")
