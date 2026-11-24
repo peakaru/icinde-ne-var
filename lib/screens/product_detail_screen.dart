@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/allergens.dart';
+import '../models/format.dart';
 import '../models/product.dart';
+import '../models/traffic_light.dart';
 import '../services/api_service.dart';
 import '../services/compare_store.dart';
 import '../services/database_service.dart';
@@ -213,14 +216,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 Text(p.brand!, style: const TextStyle(color: Colors.white54, fontSize: 14)),
               ],
               const SizedBox(height: 6),
-              Row(children: [
-                Text(
-                    ApiService.isLocalId(p.barcode)
-                        ? (_lang == 'tr' ? 'Barkodu kayıtlı değil' : 'No barcode on record')
-                        : p.barcode,
-                    style: const TextStyle(color: Colors.white38, fontSize: 13)),
+              Wrap(spacing: 10, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                if (ApiService.isLocalId(p.barcode))
+                  Text(_lang == 'tr' ? 'Barkodu kayıtlı değil' : 'No barcode on record',
+                      style: const TextStyle(color: Colors.white38, fontSize: 13))
+                else
+                  // Dokununca ya da uzun basınca barkod panoya kopyalanır
+                  Semantics(
+                    button: true,
+                    label: _lang == 'tr' ? 'Barkodu kopyala' : 'Copy barcode',
+                    child: GestureDetector(
+                      onTap: () => _copyBarcode(p.barcode),
+                      onLongPress: () => _copyBarcode(p.barcode),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Flexible(
+                          child: Text(p.barcode, style: const TextStyle(color: Colors.white38, fontSize: 13)),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.copy_rounded, size: 12, color: Colors.white24),
+                      ]),
+                    ),
+                  ),
                 if (p.dataSource.isNotEmpty) ...[
-                  const SizedBox(width: 10),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
@@ -231,14 +248,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(Icons.storage_rounded, size: 11, color: Colors.white.withValues(alpha: 0.4)),
                       const SizedBox(width: 4),
-                      Text(
-                        _sourceLabel(p.dataSource),
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10),
+                      Flexible(
+                        child: Text(
+                          _sourceLabel(p.dataSource),
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10),
+                        ),
                       ),
                     ]),
                   ),
                 ],
               ]),
+              ..._buildTrafficLights(p),
             ]),
 
             // ─── Alerjen Profili Uyarısı (kullanıcının seçtikleriyle eşleşme) ──
@@ -293,8 +313,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             // ─── Nutri-Score ─────────────────────────────────────
             if (_hasNutri) ...[
             _SectionCard(children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              SizedBox(width: double.infinity, child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 4,
                 children: [
                   const Text('NUTRI-SCORE',
                       style: TextStyle(color: Colors.white54, fontSize: 11, letterSpacing: 1.5)),
@@ -312,14 +335,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         children: [
                           const Icon(Icons.help_outline_rounded, size: 13, color: Colors.white38),
                           const SizedBox(width: 5),
-                          Text(_lang == 'tr' ? 'Nasıl hesaplandı?' : 'How is it calculated?',
-                              style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                          Flexible(
+                            child: Text(_lang == 'tr' ? 'Nasıl hesaplandı?' : 'How is it calculated?',
+                                style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                          ),
                         ],
                       ),
                     ),
                   ),
                 ],
-              ),
+              )),
               const SizedBox(height: 16),
               Row(children: [
                 // Grade badge
@@ -379,8 +404,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             // ─── Besin Değerleri (Breakdown) ──────────────────────
             if (_hasNutri && p.nutriBreakdown != null) ...[
               _SectionCard(children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                SizedBox(width: double.infinity, child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 4,
                   children: [
                     Text(
                       _lang == 'tr' ? 'BESİN DEĞERLERİ' : 'NUTRITION',
@@ -405,7 +433,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                       ),
                   ],
-                ),
+                )),
 
                 // ─── 3'lü toggle (100g / porsiyon / paket) ───
                 if (p.hasServing || p.hasPackage) ...[
@@ -450,7 +478,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               borderRadius: BorderRadius.circular(10),
                               borderSide: const BorderSide(color: Color(0xFF10B981))),
                           suffixText: _manualGrams != null
-                              ? '×${(_manualGrams! / 100).toStringAsFixed(2)}'
+                              ? '×${fmtNum(_manualGrams! / 100, 2, _lang)}'
                               : null,
                           suffixStyle: const TextStyle(color: Color(0xFF10B981), fontSize: 11),
                         ),
@@ -487,18 +515,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   final double? tuzG = p.nutriBreakdown?.sodium == null
                       ? null
                       : p.nutriBreakdown!.sodium! * mult * 2.5 / 1000;
+                  // Not eksik değer yüzünden verilemediyse zorunlu değerlerin
+                  // yokluğu gizlenmez: "kayıtlı değil" yazılır
+                  final String? missing = p.nutriscoreUnavailableReason == 'missing'
+                      ? (_lang == 'tr' ? 'kayıtlı değil' : 'not recorded')
+                      : null;
+                  final nb = p.nutriBreakdown!;
                   return Column(
                     children: [
-                      _NutrimentRow(_lang == 'tr' ? 'Enerji' : 'Energy', p.nutriBreakdown!.energy, 'kcal', mult),
-                      _NutrimentRow(_lang == 'tr' ? 'Şeker' : 'Sugars', p.nutriBreakdown!.sugars, 'g', mult),
-                      _NutrimentRow(_lang == 'tr' ? 'Doymuş Yağ' : 'Sat. Fat', p.nutriBreakdown!.saturatedFat, 'g', mult),
-                      _NutrimentRow(_lang == 'tr' ? 'Sodyum' : 'Sodium', p.nutriBreakdown!.sodium, 'mg', mult,
-                          tuzG == null
+                      _NutrimentRow(_lang == 'tr' ? 'Enerji' : 'Energy', nb.energy, 'kcal', _lang,
+                          multiplier: mult, missingText: missing),
+                      _NutrimentRow(_lang == 'tr' ? 'Şeker' : 'Sugars', nb.sugars, 'g', _lang,
+                          multiplier: mult, missingText: missing),
+                      _NutrimentRow(_lang == 'tr' ? 'Doymuş Yağ' : 'Sat. Fat', nb.saturatedFat, 'g', _lang,
+                          multiplier: mult, missingText: missing),
+                      _NutrimentRow(_lang == 'tr' ? 'Sodyum' : 'Sodium', nb.sodium, 'mg', _lang,
+                          multiplier: mult,
+                          missingText: missing,
+                          subText: tuzG == null
                               ? null
                               : "${_lang == 'tr' ? 'tuz' : 'salt'} "
-                                  "${tuzG < 1 ? tuzG.toStringAsFixed(2) : tuzG.toStringAsFixed(1)} g"),
-                      _NutrimentRow(_lang == 'tr' ? 'Protein' : 'Protein', p.nutriBreakdown!.proteins, 'g', mult),
-                      _NutrimentRow(_lang == 'tr' ? 'Lif' : 'Fiber', p.nutriBreakdown!.fiber, 'g', mult),
+                                  "${fmtNum(tuzG, tuzG < 1 ? 2 : 1, _lang)} g"),
+                      _NutrimentRow(_lang == 'tr' ? 'Protein' : 'Protein', nb.proteins, 'g', _lang,
+                          multiplier: mult, missingText: missing),
+                      _NutrimentRow(_lang == 'tr' ? 'Lif' : 'Fiber', nb.fiber, 'g', _lang,
+                          multiplier: mult),
                     ],
                   );
                 }),
@@ -658,8 +699,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   style: const TextStyle(color: Colors.white54, fontSize: 11, letterSpacing: 1.5),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  p.allIngredients!.join(', '),
+                Text.rich(
+                  _ingredientSpans(p),
                   style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.6),
                 ),
               ]),
@@ -681,6 +722,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ? 'Nutri-Score bu ürün grubuna uygulanmaz (alkollü içecek, bebek gıdası, takviye, tuz, baharat, sirke vb.).'
             : 'Nutri-Score does not apply to this product group (alcohol, baby food, supplements, salt, spices, vinegar, etc.).';
       case 'missing':
+        final missing = _missingNutrients();
+        if (missing.isNotEmpty) {
+          return tr
+              ? '${_capitalize(joinWords(missing, 'tr'))} değer${missing.length > 1 ? 'leri' : 'i'} kayıtlı olmadığı için not hesaplanamadı.'
+              : 'Not graded: no recorded value for ${joinWords(missing, 'en')}.';
+        }
         return tr
             ? 'Besin değerlerinden bazıları (enerji, şeker, doymuş yağ, tuz, protein) eksik olduğu için not hesaplanmadı.'
             : 'Not graded: some nutrition values (energy, sugars, saturated fat, salt, protein) are missing.';
@@ -796,6 +843,94 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           child: Text(Allergens.label(a, _lang), style: TextStyle(color: color, fontSize: 13)),
         )).toList(),
       );
+
+  void _copyBarcode(String barcode) {
+    Clipboard.setData(ClipboardData(text: barcode));
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(_lang == 'tr' ? '📋 Barkod kopyalandı: $barcode' : '📋 Barcode copied: $barcode'),
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  /// Not için gereken ama kayıtlı olmayan besinler ("şeker", "tuz" ...)
+  List<String> _missingNutrients() {
+    final nb = widget.product.nutriBreakdown;
+    if (nb == null) return const [];
+    final tr = _lang == 'tr';
+    return [
+      if (nb.energy == null) tr ? 'enerji' : 'energy',
+      if (nb.sugars == null) tr ? 'şeker' : 'sugars',
+      if (nb.saturatedFat == null) tr ? 'doymuş yağ' : 'saturated fat',
+      if (nb.sodium == null) tr ? 'tuz' : 'salt',
+      if (nb.proteins == null) 'protein',
+    ];
+  }
+
+  String _capitalize(String s) => s.isEmpty
+      ? s
+      : (s[0] == 'i' && _lang == 'tr' ? 'İ' : s[0].toUpperCase()) + s.substring(1);
+
+  /// Şeker / doymuş yağ / tuz için kısa özet (İngiltere FSA eşikleri)
+  List<Widget> _buildTrafficLights(Product p) {
+    final lights = trafficLights(p);
+    if (lights.isEmpty) return const [];
+    final tr = _lang == 'tr';
+    Color color(NutrientLevel l) => switch (l) {
+          NutrientLevel.high => const Color(0xFFF43F5E),
+          NutrientLevel.medium => const Color(0xFFFBBF24),
+          NutrientLevel.low => const Color(0xFF10B981),
+        };
+    final drink = p.nutriscoreCategory == 'beverage' || p.nutriscoreCategory == 'water';
+    return [
+      const SizedBox(height: 14),
+      Wrap(
+        spacing: 8, runSpacing: 8,
+        children: lights.map((t) {
+          final c = color(t.level);
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: c.withValues(alpha: 0.15),
+              border: Border.all(color: c.withValues(alpha: 0.4)),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(trafficLightLabel(t, _lang),
+                style: TextStyle(color: c, fontSize: 12, fontWeight: FontWeight.w600)),
+          );
+        }).toList(),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        tr
+            ? '${drink ? '100 ml' : '100 g'} başına, İngiltere gıda ajansı (FSA) eşiklerine göre'
+            : 'Per ${drink ? '100 ml' : '100 g'}, using UK Food Standards Agency thresholds',
+        style: const TextStyle(color: Colors.white30, fontSize: 11),
+      ),
+    ];
+  }
+
+  /// İçindekiler; alerjen kelimeleri ambalajlardaki gibi kalın
+  TextSpan _ingredientSpans(Product p) {
+    final text = p.allIngredients!.join(', ');
+    final spans = <TextSpan>[];
+    var pos = 0;
+    for (final m in p.ingredientAllergenMarks) {
+      final start = m[0], end = m[1];
+      // Aralık metinle uyuşmuyorsa (eski kayıt, değişmiş metin) işaretsiz göster
+      if (start < pos || end > text.length || start >= end) {
+        return TextSpan(text: text);
+      }
+      if (start > pos) spans.add(TextSpan(text: text.substring(pos, start)));
+      spans.add(TextSpan(
+        text: text.substring(start, end),
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+      ));
+      pos = end;
+    }
+    if (pos < text.length) spans.add(TextSpan(text: text.substring(pos)));
+    return TextSpan(children: spans);
+  }
 
   /// Kullanıcının alerjen profiliyle kesişme: içeriyorsa kırmızı, yalnızca
   /// eser miktarda içerebiliyorsa turuncu uyarı (ikisi de gösterilir)
@@ -939,6 +1074,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   unit: 'kcal',
                   points: widget.product.nutriBreakdown!.energyPts,
                   isNegative: true,
+                  lang: _lang,
                 ),
                 _BreakdownRow(
                   label: widget.product.nutriscoreCategory == 'fat_oil_nuts_seeds'
@@ -948,6 +1084,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   unit: 'g',
                   points: widget.product.nutriBreakdown!.saturatedFatPts,
                   isNegative: true,
+                  lang: _lang,
                 ),
                 _BreakdownRow(
                   label: isTr ? 'Şeker' : 'Sugars',
@@ -955,6 +1092,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   unit: 'g',
                   points: widget.product.nutriBreakdown!.sugarsPts,
                   isNegative: true,
+                  lang: _lang,
                 ),
                 _BreakdownRow(
                   label: isTr ? 'Sodyum' : 'Sodium',
@@ -962,6 +1100,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   unit: 'mg',
                   points: widget.product.nutriBreakdown!.sodiumPts,
                   isNegative: true,
+                  lang: _lang,
                 ),
                 if ((widget.product.nutriBreakdown!.sweetenersPts ?? 0) > 0)
                   _BreakdownRow(
@@ -970,6 +1109,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     unit: '',
                     points: widget.product.nutriBreakdown!.sweetenersPts,
                     isNegative: true,
+                    lang: _lang,
                   ),
 
                 const SizedBox(height: 16),
@@ -986,6 +1126,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   unit: 'g',
                   points: widget.product.nutriBreakdown!.proteinsPts,
                   isNegative: false,
+                  lang: _lang,
                 ),
                 _BreakdownRow(
                   label: isTr ? 'Lif' : 'Fiber',
@@ -993,6 +1134,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   unit: 'g',
                   points: widget.product.nutriBreakdown!.fiberPts,
                   isNegative: false,
+                  lang: _lang,
                 ),
                 _BreakdownRow(
                   label: isTr ? 'Meyve/sebze/baklagil' : 'Fruit/veg/legumes',
@@ -1000,6 +1142,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   unit: '%',
                   points: widget.product.nutriBreakdown!.fruitsVegLegumesPts,
                   isNegative: false,
+                  lang: _lang,
                 ),
 
                 // Toplam
@@ -1104,22 +1247,42 @@ class _NutrimentRow extends StatelessWidget {
   final String label;
   final double? value;
   final String unit;
+  final String lang;
   final double multiplier;
   final String? subText;
-  const _NutrimentRow(this.label, this.value, this.unit, [this.multiplier = 1.0, this.subText]);
+  /// Değer yoksa satır gizlenmek yerine bu metinle gösterilir
+  final String? missingText;
+  const _NutrimentRow(this.label, this.value, this.unit, this.lang,
+      {this.multiplier = 1.0, this.subText, this.missingText});
 
   @override
   Widget build(BuildContext context) {
-    if (value == null) return const SizedBox.shrink();
+    if (value == null) {
+      if (missingText == null) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: SizedBox(width: double.infinity, child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 4,
+          children: [
+            Text(label, style: const TextStyle(color: Colors.white54, fontSize: 14)),
+            Text(missingText!, style: const TextStyle(color: Colors.white30, fontSize: 13)),
+          ],
+        )),
+      );
+    }
     final shown = value! * multiplier;
     // Yuvarlama: 100'den büyükse tamsayı, küçükse 1 ondalık
-    final str = shown >= 100
-        ? shown.toStringAsFixed(0)
-        : shown.toStringAsFixed(1);
+    final str = fmtNum(shown, shown >= 100 ? 0 : 1, lang);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: SizedBox(width: double.infinity, child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 4,
         children: [
           Text(label, style: const TextStyle(color: Colors.white54, fontSize: 14)),
           Text.rich(TextSpan(children: [
@@ -1132,7 +1295,7 @@ class _NutrimentRow extends StatelessWidget {
           ]),
               style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
         ],
-      ),
+      )),
     );
   }
 }
@@ -1296,6 +1459,7 @@ class _BreakdownRow extends StatelessWidget {
   final String unit;
   final int? points;
   final bool isNegative;
+  final String lang;
 
   const _BreakdownRow({
     required this.label,
@@ -1303,6 +1467,7 @@ class _BreakdownRow extends StatelessWidget {
     required this.unit,
     required this.points,
     required this.isNegative,
+    required this.lang,
   });
 
   @override
@@ -1322,7 +1487,7 @@ class _BreakdownRow extends StatelessWidget {
             Expanded(
               flex: 3,
               child: Text(
-                '${value!.toStringAsFixed(1)} $unit',
+                '${fmtNum(value!, 1, lang)} $unit',
                 style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ),
@@ -1335,7 +1500,7 @@ class _BreakdownRow extends StatelessWidget {
                 border: Border.all(color: ptColor.withValues(alpha: 0.4)),
               ),
               child: Text(
-                '$ptPrefix$points puan',
+                '$ptPrefix$points ${lang == 'tr' ? 'puan' : 'pts'}',
                 style: TextStyle(color: ptColor, fontSize: 12, fontWeight: FontWeight.w700),
               ),
             ),

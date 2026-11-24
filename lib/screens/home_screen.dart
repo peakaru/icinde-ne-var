@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import '../models/product.dart';
 import '../services/api_service.dart';
 import '../services/database_service.dart';
+import '../services/system_service.dart';
+import '../services/update_service.dart';
 import 'scanner_screen.dart';
 import 'product_detail_screen.dart';
 import 'favorites_screen.dart';
@@ -29,12 +32,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   // Her aramada artar; geç dönen eski bir yanıt yenisinin üstüne yazılmasın
   int _searchSeq = 0;
 
+  // Ana ekranda son bakılan ürünler (geçmişin ilk 3'ü)
+  List<Product> _recent = [];
+  // GitHub'da yayımlanmış daha yeni sürüm (varsa)
+  UpdateInfo? _update;
+  // Sorgu 4 sn'yi geçerse "sunucu uyanıyor" uyarısı
+  final Set<Object> _waits = {};  // süren sunucu istekleri
+  Timer? _wakeTimer;
+  int _wakeSeq = 0;
+  int? _wakeWanted;   // gösterilmesi istenen uyarı
+  int? _wakeVisible;  // şu an ekranda olan uyarı
+
   late AnimationController _pulseController;
 
   @override
   void initState() {
     super.initState();
     _loadLang();
+    _loadRecent();
+    _checkUpdate();
     _pulseController = AnimationController(
       vsync: this, duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
@@ -46,12 +62,221 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _barcodeController.dispose();
     _searchFocus.dispose();
     _searchDebounce?.cancel();
+    _wakeTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _loadLang() async {
     final lang = await DatabaseService.getSetting('lang') ?? 'tr';
     if (mounted) setState(() => _lang = lang);
+  }
+
+  Future<void> _loadRecent() async {
+    try {
+      final hist = await DatabaseService.getHistory();
+      if (mounted) setState(() => _recent = hist.take(3).toList());
+    } catch (e) {
+      debugPrint('Geçmiş okunamadı: $e');
+    }
+  }
+
+  Future<void> _checkUpdate() async {
+    final update = await UpdateService.check();
+    if (mounted && update != null) setState(() => _update = update);
+  }
+
+  /// Hugging Face Space bir süre kullanılmayınca uyur; ilk istek uzun
+  /// sürebilir. Bir istek 4 sn'yi geçerse kullanıcıya nedenini söyle.
+  ///
+  /// Her istek [_beginWait] ile bir jeton alır ve bitince [_endWait] ile
+  /// bırakır (iki kez bırakmak zararsız). Uyarı, süren istek kalmayınca kalkar.
+  Object _beginWait() {
+    final token = Object();
+    _waits.add(token);
+    _wakeTimer ??= Timer(const Duration(seconds: 4), _showWakeHint);
+    return token;
+  }
+
+  void _endWait(Object token) {
+    if (!_waits.remove(token) || _waits.isNotEmpty) return;
+    _wakeTimer?.cancel();
+    _wakeTimer = null;
+    _wakeWanted = null;
+    if (_wakeVisible != null && mounted) {
+      _wakeVisible = null;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
+  }
+
+  /// Uyarı başka bir bildirimin arkasında sırada bekleyebilir; bu yüzden
+  /// yalnızca gerçekten ekrandayken kapatılır, sıradayken iptal edildiyse
+  /// göründüğü anda kendini kapatır (başka bildirimi yanlışlıkla kapatmamak için).
+  void _showWakeHint() {
+    _wakeTimer = null;
+    if (!mounted || _waits.isEmpty || _wakeWanted != null) return;
+    final id = ++_wakeSeq;
+    _wakeWanted = id;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+        .showSnackBar(SnackBar(
+          content: Text(
+            _lang == 'tr'
+                ? 'Sunucu uyanıyor, ilk sorgu yarım dakikayı bulabilir…'
+                : 'The server is waking up; the first request can take up to half a minute…',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: const Color(0xFF1A3A28),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 30),
+          onVisible: () {
+            if (_wakeWanted == id) {
+              _wakeVisible = id;
+            } else {
+              messenger.hideCurrentSnackBar(); // sırada beklerken iptal edildi
+            }
+          },
+        ))
+        .closed
+        .then((_) {
+          if (_wakeVisible == id) _wakeVisible = null;
+          if (_wakeWanted == id) _wakeWanted = null;
+        });
+  }
+
+  Future<void> _openUpdate() async {
+    final url = _update?.url;
+    if (url == null) return;
+    final ok = await SystemService.openUrl(url);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_lang == 'tr' ? 'Bağlantı açılamadı: $url' : 'Could not open the link: $url'),
+      ));
+    }
+  }
+
+  Future<void> _openScanner() async {
+    final barcode = await Navigator.push<String>(context,
+        MaterialPageRoute(builder: (_) => const ScannerScreen()));
+    if (barcode != null) _lookupBarcode(barcode);
+  }
+
+  void _openHistory() {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen()))
+        .then((_) => _loadRecent());
+  }
+
+  void _openProduct(Product p) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetailScreen(product: p)))
+        .then((_) => _loadRecent());
+  }
+
+  /// Barkod veritabanında yok: nedenini ve yapılabilecekleri anlatan sayfa
+  void _showNotFound(String barcode) {
+    final tr = _lang == 'tr';
+    var copied = false;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF132720),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(children: [
+                const Icon(Icons.search_off_rounded, color: Color(0xFFFBBF24), size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    tr ? 'Bu ürün veritabanımızda yok' : 'This product is not in our database',
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              StatefulBuilder(builder: (ctx, setSheet) {
+                return Semantics(
+                  button: true,
+                  label: tr ? 'Barkodu kopyala' : 'Copy barcode',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: barcode));
+                      setSheet(() => copied = true);
+                    },
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Flexible(
+                        child: Text(barcode, style: const TextStyle(color: Colors.white54, fontSize: 15)),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(copied ? Icons.check_rounded : Icons.copy_rounded,
+                          size: 14, color: copied ? const Color(0xFF2EE89A) : Colors.white24),
+                      if (copied) ...[
+                        const SizedBox(width: 4),
+                        Text(tr ? 'kopyalandı' : 'copied',
+                            style: const TextStyle(color: Color(0xFF2EE89A), fontSize: 12)),
+                      ],
+                    ]),
+                  ),
+                );
+              }),
+              const SizedBox(height: 12),
+              Text(
+                tr
+                    ? 'Barkod doğru okunduysa bu ürün ne veritabanımızda ne de Open Food Facts\'te '
+                        'bulunamadı. Ürünü adıyla aramayı dene: marketlerden derlenen kayıtların bir '
+                        'kısmında barkod bulunmuyor, ürün o kayıtlar arasında olabilir.'
+                    : 'If the barcode was read correctly, this product could not be found in our '
+                        'database or in Open Food Facts. Try searching by name: some records collected '
+                        'from supermarkets have no barcode, and the product may be one of them.',
+                style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _barcodeController.clear();
+                  setState(() => _searchResults = []);
+                  _searchFocus.requestFocus();
+                },
+                icon: const Icon(Icons.search_rounded),
+                label: Text(tr ? 'İsimle ara' : 'Search by name'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white24),
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _openScanner();
+                },
+                icon: const Icon(Icons.camera_alt_rounded),
+                label: Text(tr ? 'Tekrar tara' : 'Scan again'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Girdi değişince: rakamsa barkod modu (bekleme yok),
@@ -78,6 +303,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final seq = ++_searchSeq;
     bool isCurrent() => mounted && seq == _searchSeq;
     if (mounted) setState(() => _searching = true);
+    final wait = _beginWait();
     try {
       final results = await SearchService.search(query, limit: 8);
       if (isCurrent()) setState(() => _searchResults = results);
@@ -98,6 +324,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     } catch (_) {
       if (isCurrent()) setState(() => _searchResults = []);
     } finally {
+      _endWait(wait);
       if (isCurrent()) setState(() => _searching = false);
     }
   }
@@ -106,15 +333,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _openSearchResult(SearchResult r) async {
     if (_loading) return; // çift dokunuş iki detay ekranı açmasın
     if (mounted) setState(() => _loading = true);
+    final wait = _beginWait();
     try {
       final result = await LookupService.lookup(r.barcode);
+      _endWait(wait);
       final product = result.product;
       await DatabaseService.addToHistory(product);
+      _loadRecent();
       if (!mounted) return;
       Navigator.push(context, MaterialPageRoute(
         builder: (_) => ProductDetailScreen(product: product),
       ));
     } catch (e) {
+      _endWait(wait);
       if (!mounted) return;
       if (e is! ProductNotFoundException) {
         _showLookupError(e);
@@ -127,6 +358,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         behavior: SnackBarBehavior.floating,
       ));
     } finally {
+      _endWait(wait);
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -134,10 +366,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _lookupBarcode(String barcode, {String? imagePath}) async {
     if (barcode.isEmpty || _loading) return; // çift dokunuş iki sorgu başlatmasın
     setState(() => _loading = true);
+    final wait = _beginWait();
     try {
       final result = await LookupService.lookup(barcode);
+      _endWait(wait);
       final product = result.product;
       await DatabaseService.addToHistory(product);
+      _loadRecent();
       if (!mounted) return;
       // Çevrimdışı cache'ten geldiyse bilgilendir
       if (result.fromCache) {
@@ -155,16 +390,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         builder: (_) => ProductDetailScreen(product: product, imagePath: imagePath),
       ));
     } catch (e) {
+      _endWait(wait);
       if (!mounted) return;
-      _showLookupError(e);
+      _showLookupError(e, barcode: barcode);
     } finally {
+      _endWait(wait);
       if (mounted) setState(() => _loading = false);
     }
   }
 
   /// Sorgu hatasını türüne göre anlat: "ürün yok" ile "bağlantı yok" ya da
   /// "sunucu yanıt vermiyor" aynı şey değil.
-  void _showLookupError(Object e) {
+  void _showLookupError(Object e, {String? barcode}) {
     final tr = _lang == 'tr';
     String? message;
     if (e is RateLimitException) {
@@ -193,7 +430,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ));
       return;
     }
-    // Ürün veritabanında yok → isimle aramaya yönlendir
+    // Ürün veritabanında yok → nedenini anlatan sayfa (isimle ara / tekrar tara)
+    if (barcode != null) {
+      _showNotFound(barcode);
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(
         _lang == 'tr'
@@ -273,8 +514,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   _loadLang();
                                 },
                               ),
-                              // Logo
-                              AnimatedBuilder(
+                              // Logo (büyük yazı tipinde sığmazsa küçülür)
+                              Flexible(child: AnimatedBuilder(
                                 animation: _pulseController,
                                 builder: (_, __) {
                                   final glow = 0.15 + _pulseController.value * 0.2;
@@ -294,7 +535,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                         ),
                                       ],
                                     ),
-                                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                    child: FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [
                                       Image.asset('assets/images/logo.png', height: 48, width: 48),
                                       const SizedBox(width: 10),
                                       Column(
@@ -311,10 +552,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                           )),
                                         ],
                                       ),
-                                    ]),
+                                    ])),
                                   );
                                 },
-                              ),
+                              )),
                               _GlassIconBtn(
                                 icon: Icons.star_rounded,
                                 color: const Color(0xFFFBBF24),
@@ -323,6 +564,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ),
                             ],
                           ),
+
+                          // ── Yeni sürüm ──────────────────────────
+                          if (_update != null) ...[
+                            const SizedBox(height: 16),
+                            _UpdateCard(
+                              update: _update!,
+                              lang: _lang,
+                              onOpen: _openUpdate,
+                              onDismiss: () {
+                                UpdateService.dismiss(_update!.version);
+                                setState(() => _update = null);
+                              },
+                            ),
+                          ],
 
                           const SizedBox(height: 40),
 
@@ -368,11 +623,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             iconBg: const Color(0xFF10B981),
                             title: _lang == 'tr' ? 'BARKOD TARA' : 'SCAN BARCODE',
                             subtitle: _lang == 'tr' ? 'Ürünün barkodunu kamerayla okut' : 'Point camera at barcode',
-                            onTap: () async {
-                              final barcode = await Navigator.push<String>(context,
-                                  MaterialPageRoute(builder: (_) => const ScannerScreen()));
-                              if (barcode != null) _lookupBarcode(barcode);
-                            },
+                            onTap: _openScanner,
                           ),
 
                           const SizedBox(height: 12),
@@ -404,8 +655,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             iconBg: const Color(0xFF3A3A3A),
                             title: _lang == 'tr' ? 'SON TARAMALAR' : 'RECENT SCANS',
                             subtitle: _lang == 'tr' ? 'Geçmiş taramalarını gör' : 'View scan history',
-                            onTap: () => Navigator.push(context,
-                                MaterialPageRoute(builder: (_) => const HistoryScreen())),
+                            onTap: _openHistory,
                           ),
 
                           const SizedBox(height: 28),
@@ -525,14 +775,56 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 const SizedBox(height: 10),
                                 ..._searchResults.map((r) => Padding(
                                   padding: const EdgeInsets.only(bottom: 6),
-                                  child: _SearchResultTile(
-                                    result: r,
+                                  child: _ProductTile(
+                                    name: r.productName,
+                                    brand: r.brand,
+                                    grade: r.nutriscore,
+                                    // Not açılınca OFF verisiyle hesaplanacak; listede
+                                    // yerel veriden not göstermek çelişebilirdi
+                                    note: r.gradeOnOpen
+                                        ? (_lang == 'tr'
+                                            ? 'Not, ürün açılınca hesaplanır'
+                                            : 'Grade is calculated when opened')
+                                        : null,
                                     onTap: () => _openSearchResult(r),
                                   ),
                                 )),
                               ],
                             ],
                           ),
+
+                          // ── Son bakılan ürünler ────────────────────
+                          if (_recent.isNotEmpty && _searchResults.isEmpty && !_searching) ...[
+                            const SizedBox(height: 26),
+                            Row(children: [
+                              Expanded(
+                                child: Text(
+                                  _lang == 'tr' ? 'Son baktıkların' : 'Recently viewed',
+                                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5),
+                                      fontSize: 13, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: _openHistory,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                                  child: Text(_lang == 'tr' ? 'Tümü' : 'All',
+                                      style: const TextStyle(color: Color(0xFF2EE89A),
+                                          fontSize: 13, fontWeight: FontWeight.w600)),
+                                ),
+                              ),
+                            ]),
+                            const SizedBox(height: 10),
+                            ..._recent.map((p) => Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: _ProductTile(
+                                name: p.productName,
+                                brand: p.brand ?? '',
+                                grade: p.nutriscoreGrade,
+                                onTap: () => _openProduct(p),
+                              ),
+                            )),
+                          ],
 
                           const SizedBox(height: 36),
                         ],
@@ -564,13 +856,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Text(
-                              _lang == 'tr'
-                                  ? 'İçinde Ne Var? • Sağlık için geliştirildi'
-                                  : "What's Inside? • Built for health",
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.22),
-                                fontSize: 11,
+                            Flexible(
+                              child: Text(
+                                _lang == 'tr'
+                                    ? 'İçinde Ne Var? • Sağlık için geliştirildi'
+                                    : "What's Inside? • Built for health",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.22),
+                                  fontSize: 11,
+                                ),
                               ),
                             ),
                           ],
@@ -694,12 +989,21 @@ class _AeroCard extends StatelessWidget {
   }
 }
 
-// ── Arama sonuç satırı ────────────────────────────────────────────
-class _SearchResultTile extends StatelessWidget {
-  final SearchResult result;
+// ── Ürün satırı (arama sonucu / son bakılan) ─────────────────────
+class _ProductTile extends StatelessWidget {
+  final String name;
+  final String brand;
+  final String? grade;   // "a".."e" ya da null (not yok)
+  final String? note;    // ek bilgi satırı
   final VoidCallback onTap;
 
-  const _SearchResultTile({required this.result, required this.onTap});
+  const _ProductTile({
+    required this.name,
+    required this.brand,
+    required this.grade,
+    this.note,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -720,14 +1024,14 @@ class _SearchResultTile extends StatelessWidget {
             Container(
               width: 34, height: 34,
               decoration: BoxDecoration(
-                color: result.nutriscore != null
-                    ? result.nutriscoreColor
+                color: grade != null
+                    ? nutriScoreColor(grade)
                     : const Color(0xFF10B981).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: result.nutriscore != null
+              child: grade != null
                   ? Center(child: Text(
-                      result.nutriscore!.toUpperCase(),
+                      grade!.toUpperCase(),
                       style: const TextStyle(color: Colors.white,
                           fontWeight: FontWeight.w900, fontSize: 16),
                     ))
@@ -738,14 +1042,19 @@ class _SearchResultTile extends StatelessWidget {
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(result.productName,
+                Text(name,
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontSize: 14,
                         fontWeight: FontWeight.w600)),
-                if (result.brand.isNotEmpty)
-                  Text(result.brand,
+                if (brand.isNotEmpty)
+                  Text(brand,
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                if (note != null)
+                  Text(note!,
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white30, fontSize: 11,
+                          fontStyle: FontStyle.italic)),
               ],
             )),
             const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 22),
@@ -780,6 +1089,59 @@ class _GlassIconBtn extends StatelessWidget {
           border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         ),
         child: Icon(icon, color: color, size: 22),
+      ),
+    );
+  }
+}
+
+// ── Yeni sürüm kartı ──────────────────────────────────────────────
+class _UpdateCard extends StatelessWidget {
+  final UpdateInfo update;
+  final String lang;
+  final VoidCallback onOpen;
+  final VoidCallback onDismiss;
+
+  const _UpdateCard({
+    required this.update,
+    required this.lang,
+    required this.onOpen,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tr = lang == 'tr';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F2A1E),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.system_update_rounded, color: Color(0xFF2EE89A), size: 26),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(tr ? 'Yeni sürüm var: ${update.version}' : 'New version available: ${update.version}',
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(tr ? 'İndirme sayfasını açmak için dokun' : 'Tap to open the download page',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              ]),
+            ),
+            IconButton(
+              tooltip: tr ? 'Bu sürümü gösterme' : 'Hide for this version',
+              icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 20),
+              onPressed: onDismiss,
+            ),
+          ]),
+        ),
       ),
     );
   }

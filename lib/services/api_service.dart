@@ -132,13 +132,18 @@ class SearchResult {
   final String productName;
   final String brand;
   final String? nutriscore; // "a".."e" veya null (hesaplanamadı)
-  SearchResult({required this.barcode, required this.productName, required this.brand, this.nutriscore});
+  /// Not listede gösterilmedi: ürün açılınca Open Food Facts verisiyle
+  /// hesaplanır ve yerel veriden farklı çıkabilir
+  final bool gradeOnOpen;
+  SearchResult({required this.barcode, required this.productName, required this.brand,
+      this.nutriscore, this.gradeOnOpen = false});
 
   factory SearchResult.fromJson(Map<String, dynamic> j) => SearchResult(
         barcode: j['barcode'] ?? '',
         productName: j['product_name'] ?? 'Bilinmeyen Ürün',
         brand: j['brand'] ?? '',
         nutriscore: j['nutriscore'],
+        gradeOnOpen: j['grade_on_open'] == true,
       );
 
   Color get nutriscoreColor => nutriScoreColor(nutriscore);

@@ -103,6 +103,7 @@ class DatabaseService {
     'allergens': p.allergens,
     'allergen_traces': p.allergenTraces,
     'all_ingredients': p.allIngredients,
+    'ingredient_allergen_marks': p.ingredientAllergenMarks,
     'critical_safety_rule': p.criticalSafetyRule,
     // Porsiyon/paket bilgisi (geçmişten bakınca toggle çalışsın)
     'product_quantity': p.productQuantity,

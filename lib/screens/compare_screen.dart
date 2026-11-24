@@ -3,6 +3,7 @@ import '../models/product.dart';
 import '../services/compare_store.dart';
 import '../services/database_service.dart';
 import 'product_detail_screen.dart';
+import '../models/format.dart';
 
 /// İki ürünü yan yana karşılaştırır: NS, besinler (100g), risk sayıları.
 /// CompareStore'daki 2 ürünle açılır.
@@ -220,8 +221,8 @@ class _CompareRow extends StatelessWidget {
     String fmt(v) {
       if (v == null) return '—';
       if (v is double) {
-        if (v >= 100) return v.toStringAsFixed(0);
-        return v.toStringAsFixed(v == v.roundToDouble() ? 0 : 1);
+        if (v >= 100) return fmtNum(v, 0, lang);
+        return fmtNum(v, v == v.roundToDouble() ? 0 : 1, lang);
       }
       return v.toString();
     }

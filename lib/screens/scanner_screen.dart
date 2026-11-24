@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/database_service.dart';
+import '../services/system_service.dart';
 
 class ScannerScreen extends StatefulWidget {
   final String? imagePath; // Galeriden gelirse dolu olur
@@ -76,6 +78,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
     final barcode = capture.barcodes.firstOrNull?.rawValue;
     if (barcode != null) {
       _scanned = true;
+      // Okunduğu hissedilsin (titreşim izni gerektirmez)
+      HapticFeedback.mediumImpact();
       _controller.stop();
       Navigator.pop(context, barcode);
     }
@@ -126,29 +130,110 @@ class _ScannerScreenState extends State<ScannerScreen> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          MobileScanner(controller: _controller, onDetect: _onDetect),
-          Center(
-            child: Container(
-              width: 280, height: 180,
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFF10B981), width: 3),
-                borderRadius: BorderRadius.circular(16),
+      body: MobileScanner(
+        controller: _controller,
+        onDetect: _onDetect,
+        errorBuilder: (context, error, child) => _CameraError(error: error, lang: _lang),
+        // Çerçeve ve ipucu yalnızca kamera görüntüsü varken çizilir; hata
+        // ekranındaki "Ayarları aç" düğmesinin üstünü kapatmasın
+        overlayBuilder: (context, constraints) => SizedBox.fromSize(
+          size: constraints.biggest,
+          child: Stack(
+            children: [
+              Center(
+                child: IgnorePointer(
+                  child: Container(
+                    width: 280, height: 180,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFF10B981), width: 3),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              Positioned(
+                bottom: 60, left: 0, right: 0,
+                child: Text(
+                  _lang == 'tr'
+                      ? 'Barkodu çerçeve içine alın'
+                      : 'Align the barcode within the frame',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, backgroundColor: Colors.black54),
+                ),
+              ),
+            ],
           ),
-          Positioned(
-            bottom: 60, left: 0, right: 0,
-            child: Text(
-              _lang == 'tr'
-                  ? 'Barkodu çerçeve içine alın'
-                  : 'Align the barcode within the frame',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontSize: 16, backgroundColor: Colors.black54),
-            ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kamera açılamadığında (çoğunlukla izin verilmediği için) gösterilen ekran
+class _CameraError extends StatelessWidget {
+  final MobileScannerException error;
+  final String lang;
+  const _CameraError({required this.error, required this.lang});
+
+  @override
+  Widget build(BuildContext context) {
+    final tr = lang == 'tr';
+    final denied = error.errorCode == MobileScannerErrorCode.permissionDenied;
+    final title = denied
+        ? (tr ? 'Kamera izni verilmedi' : 'Camera permission denied')
+        : (tr ? 'Kamera açılamadı' : 'Could not open the camera');
+    final body = denied
+        ? (tr
+            ? 'Barkod okumak için kameraya izin vermen gerekiyor. Ayarlar > İzinler > Kamera '
+                'bölümünden izin verip bu ekranı yeniden açabilirsin. Kamerasız da galeriden '
+                'barkod fotoğrafı seçebilir ya da ürünü adıyla arayabilirsin.'
+            : 'Scanning needs camera access. Allow it under Settings > Permissions > Camera, '
+                'then open this screen again. Without the camera you can still pick a barcode '
+                'photo from the gallery or search by product name.')
+        : (tr
+            ? 'Kamera başka bir uygulama tarafından kullanılıyor olabilir. Geri dönüp tekrar dene; '
+                'olmazsa galeriden barkod fotoğrafı seçebilirsin.'
+            : 'Another app may be using the camera. Go back and try again, or pick a barcode '
+                'photo from the gallery.');
+    return Container(
+      color: Colors.black,
+      padding: const EdgeInsets.all(28),
+      child: Center(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.no_photography_outlined, color: Colors.white54, size: 56),
+              const SizedBox(height: 18),
+              Text(title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              Text(body,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5)),
+              const SizedBox(height: 24),
+              if (denied)
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+                  onPressed: () async {
+                    final ok = await SystemService.openAppSettings();
+                    if (!ok && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(tr ? 'Ayarlar açılamadı.' : 'Could not open settings.'),
+                      ));
+                    }
+                  },
+                  icon: const Icon(Icons.settings_outlined),
+                  label: Text(tr ? 'Ayarları aç' : 'Open settings'),
+                ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(tr ? 'Geri dön' : 'Go back', style: const TextStyle(color: Colors.white70)),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

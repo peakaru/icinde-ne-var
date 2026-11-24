@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../models/format.dart';
 import '../models/product.dart';
 import '../services/database_service.dart';
 import 'product_detail_screen.dart';
@@ -17,11 +18,40 @@ class _HistoryScreenState extends State<HistoryScreen> {
   // Seçim modu: checkbox'larla belli kayıtları silme
   bool _selectMode = false;
   final Set<String> _selected = {};
+  // Geçmişte arama (ad, marka, barkod)
+  final TextEditingController _queryController = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    super.dispose();
+  }
+
+  /// Arama kutusuna uyan kayıtlar
+  List<Product> get _visible {
+    final q = foldForSearch(_query.trim());
+    if (q.isEmpty) return _history;
+    final words = q.split(RegExp(r'\s+'));
+    return _history.where((p) {
+      final hay = foldForSearch('${p.productName} ${p.brand ?? ''} ${p.barcode}');
+      return words.every(hay.contains);
+    }).toList();
+  }
+
+  void _onQueryChanged(String v) {
+    setState(() {
+      _query = v;
+      // Görünmeyen kayıtlar seçili kalmasın; silinecekler hep ekranda olsun
+      final visible = _visible.map((p) => p.barcode).toSet();
+      _selected.retainWhere(visible.contains);
+    });
   }
 
   Future<void> _load() async {
@@ -50,11 +80,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _toggleSelectAll() {
+    final visible = _visible.map((p) => p.barcode).toList();
     setState(() {
-      if (_selected.length == _history.length) {
-        _selected.clear();
+      if (visible.every(_selected.contains)) {
+        _selected.removeAll(visible);
       } else {
-        _selected.addAll(_history.map((p) => p.barcode));
+        _selected.addAll(visible);
       }
     });
   }
@@ -134,7 +165,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final allSelected = _history.isNotEmpty && _selected.length == _history.length;
+    final visible = _visible;
+    final allSelected = visible.isNotEmpty && visible.every((p) => _selected.contains(p.barcode));
     return Scaffold(
       backgroundColor: const Color(0xFF0D1F1A),
       appBar: AppBar(
@@ -203,13 +235,67 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ],
               ),
             )
-          : ListView.builder(
+          : Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: TextField(
+                  controller: _queryController,
+                  onChanged: _onQueryChanged,
+                  textInputAction: TextInputAction.search,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: _lang == 'tr' ? 'Geçmişte ara: ad, marka, barkod' : 'Search history: name, brand, barcode',
+                    hintStyle: const TextStyle(color: Colors.white30),
+                    prefixIcon: const Icon(Icons.search_rounded, color: Colors.white38),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: _lang == 'tr' ? 'Temizle' : 'Clear',
+                            icon: const Icon(Icons.close_rounded, color: Colors.white38),
+                            onPressed: () {
+                              _queryController.clear();
+                              _onQueryChanged('');
+                            },
+                          ),
+                    filled: true,
+                    fillColor: const Color(0xFF132720),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFF10B981)),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: visible.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            _lang == 'tr' ? 'Aramana uyan kayıt yok' : 'No entries match your search',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white38, fontSize: 15),
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: _history.length,
+              itemCount: visible.length,
               itemBuilder: (ctx, i) {
-                final p = _history[i];
+                final p = visible[i];
                 final isSelected = _selected.contains(p.barcode);
                 return _HistoryTile(
+                  // Süzülünce satırlar yer değiştirir; favori durumu ürünle kalsın
+                  key: ValueKey(p.barcode),
                   product: p,
                   lang: _lang,
                   selectMode: _selectMode,
@@ -238,6 +324,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 );
               },
             ),
+              ),
+            ]),
     );
   }
 }
@@ -253,6 +341,7 @@ class _HistoryTile extends StatefulWidget {
   final VoidCallback onFavTap;
 
   const _HistoryTile({
+    super.key,
     required this.product,
     required this.lang,
     required this.selectMode,

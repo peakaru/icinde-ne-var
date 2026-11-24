@@ -55,11 +55,11 @@ List<({String title, List<String> paras})> get _trSections => [
       (
         title: 'GİZLİLİK POLİTİKASI',
         paras: [
-          'Son güncelleme: Eylül 2026',
+          'Son güncelleme: Kasım 2026',
           'Bu politika, "İçinde Ne Var?" uygulaması ("Uygulama") tarafından işlenen kişisel verilerin hangi amaçlarla, ne şekilde işlendiğini 6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) ve Avrupa Birliği Genel Veri Koruma Tüzüğü (GDPR) uyarınca açıklar.',
           '1. İşlenen veriler: Uygulama yalnızca aşağıdaki asgari verileri işler: (a) tarattığınız ürün barkod numaraları, (b) arama kutusuna girdiğiniz ürün adları, (c) görsel analiz özelliğini kullanırsanız, yüklediğiniz ürün fotoğrafları. Konum, rehber, bildirim kimliği, reklam kimliği veya cihaz tanımlayıcıları TOPLANMAZ.',
           '2. Verilerin işlenme amacı: Taranan barkodların ve aramaların ürün veritabanında eşleştirilmesi ve sonuçların gösterilmesi. Fotoğraflar yalnızca barkod/etiket okuma amacıyla işlenir; kalıcı olarak saklanmaz.',
-          '3. Üçüncü taraflara aktarım: Ürün sorguları, barındırma altyapısı olarak Hugging Face (ABD/AB) ve açık kaynaklı Open Food Facts veritabanına iletilir. Bu aktarımlar yalnızca tarama sonucu üretmek içindir; pazarlama veya profil oluşturma amacıyla veri satılmaz veya paylaşılmaz.',
+          '3. Üçüncü taraflara aktarım: Ürün sorguları, barındırma altyapısı olarak Hugging Face (ABD/AB) ve açık kaynaklı Open Food Facts veritabanına iletilir. Bu aktarımlar yalnızca tarama sonucu üretmek içindir; pazarlama veya profil oluşturma amacıyla veri satılmaz veya paylaşılmaz. Uygulama ayrıca günde en fazla bir kez GitHub\'a (ABD) yeni sürüm olup olmadığını sorar; bu istekte yalnızca standart bağlantı bilgileri (IP adresi gibi) bulunur, ürün ya da kişisel veri gönderilmez.',
           '4. Yerel depolama: Arama geçmişiniz, favorileriniz ve alerjen tercihleriniz yalnızca kendi cihazınızda saklanır; sunucularımıza gönderilmez.',
           '5. Analitik ve izleme: Uygulama içinde hiçbir analitik, reklam veya izleme bileşeni (Firebase Analytics, çerez, piksel vb.) KULLANILMAZ.',
           '6. Saklama: Sorgular sunucu tarafında yalnızca standart sistem günlüklerinde geçici olarak yer alır; ayrı bir kullanıcı profili oluşturulmaz.',
@@ -99,11 +99,11 @@ List<({String title, List<String> paras})> get _enSections => [
       (
         title: 'PRIVACY POLICY',
         paras: [
-          'Last updated: September 2026',
+          'Last updated: November 2026',
           'This policy explains how the app "İçinde Ne Var?" ("App") processes personal data, in accordance with the EU General Data Protection Regulation (GDPR) and applicable data protection law.',
           '1. Data processed: The App only processes the following minimal data: (a) product barcode numbers you scan, (b) product names you type into search, (c) product photos you upload if you use the image analysis feature. Location, contacts, notification IDs, advertising IDs or device identifiers are NOT collected.',
           '2. Purpose: Matching scanned barcodes and searches against the product database and displaying results. Photos are processed solely for barcode/label reading and are not retained.',
-          '3. Third parties: Product queries are sent to our hosting provider Hugging Face (US/EU) and the open Open Food Facts database, solely to produce scan results. No data is sold or shared for marketing or profiling.',
+          '3. Third parties: Product queries are sent to our hosting provider Hugging Face (US/EU) and the open Open Food Facts database, solely to produce scan results. No data is sold or shared for marketing or profiling. The App also asks GitHub (US) at most once a day whether a newer version exists; this request carries only standard connection information (such as your IP address) and no product or personal data.',
           '4. Local storage: Your search history, favorites and allergen preferences are stored only on your device and never uploaded.',
           '5. Analytics & tracking: The App contains NO analytics, advertising or tracking components (no Firebase Analytics, cookies or pixels).',
           '6. Retention: Queries appear only transiently in standard server logs; no user profiles are created.',

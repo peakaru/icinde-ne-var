@@ -123,6 +123,9 @@ class Product {
 
   // İçerikler
   final List<String>? allIngredients;
+  /// Alerjen kelimelerinin [başlangıç, bitiş) aralıkları; `allIngredients`
+  /// ", " ile birleştirilmiş metne göre (kalın göstermek için)
+  final List<List<int>> ingredientAllergenMarks;
   final List<RiskIngredient>? foundRisks;
   /// Tüm alerjenler (eser miktar uyarıları dahil)
   final List<String>? allergens;
@@ -155,6 +158,7 @@ class Product {
     this.nutriscoreCategory,
     this.nutriscoreUnavailableReason,
     this.allIngredients,
+    this.ingredientAllergenMarks = const [],
     this.foundRisks,
     this.allergens,
     this.allergenTraces = const [],
@@ -195,6 +199,16 @@ class Product {
     final allergensRaw = json['allergens'] as List<dynamic>?;
     final allergens = allergensRaw?.map((e) => e.toString()).toList();
     final tracesRaw = json['allergen_traces'];
+    // Alerjen aralıkları: [[başlangıç, bitiş], ...]; bozuk öğeler atlanır
+    final marksRaw = json['ingredient_allergen_marks'];
+    final marks = <List<int>>[];
+    if (marksRaw is List) {
+      for (final m in marksRaw) {
+        if (m is List && m.length == 2 && m[0] is int && m[1] is int) {
+          marks.add([m[0] as int, m[1] as int]);
+        }
+      }
+    }
     final traces = tracesRaw is List ? tracesRaw.map((e) => e.toString()).toList() : <String>[];
 
     return Product(
@@ -210,6 +224,7 @@ class Product {
       nutriscoreCategory: nutriScore?['category'] as String?,
       nutriscoreUnavailableReason: nutriScore?['unavailable_reason'] as String?,
       allIngredients: ingredients,
+      ingredientAllergenMarks: marks,
       foundRisks: risks,
       allergens: allergens,
       allergenTraces: traces,
