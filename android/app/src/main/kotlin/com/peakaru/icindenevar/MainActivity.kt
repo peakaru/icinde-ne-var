@@ -1,8 +1,11 @@
 package com.peakaru.icindenevar
 
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -35,9 +38,29 @@ class MainActivity : FlutterActivity() {
                                 result.success(true)
                             }
                         }
+                        "vibrate" -> {
+                            // Sistemin "dokunma geri bildirimi" ayarından bağımsız kısa titreşim
+                            val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= 31) {
+                                (getSystemService(VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+                            } else {
+                                @Suppress("DEPRECATION")
+                                getSystemService(VIBRATOR_SERVICE) as? Vibrator
+                            }
+                            if (vibrator == null || !vibrator.hasVibrator()) {
+                                result.success(false)
+                            } else {
+                                if (Build.VERSION.SDK_INT >= 26) {
+                                    vibrator.vibrate(VibrationEffect.createOneShot(60, VibrationEffect.DEFAULT_AMPLITUDE))
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    vibrator.vibrate(60)
+                                }
+                                result.success(true)
+                            }
+                        }
                         else -> result.notImplemented()
                     }
-                } catch (e: ActivityNotFoundException) {
+                } catch (e: Exception) {
                     result.success(false)
                 }
             }

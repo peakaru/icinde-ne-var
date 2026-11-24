@@ -10,6 +10,9 @@ class SystemService {
   /// Bağlantıyı tarayıcıda açar (yalnızca https).
   static Future<bool> openUrl(String url) => _call('openUrl', {'url': url});
 
+  /// Kısa titreşim (barkod okununca). Telefonda titreşim yoksa false.
+  static Future<bool> vibrate() => _call('vibrate');
+
   static Future<bool> _call(String method, [Map<String, Object?>? args]) async {
     try {
       return await _channel.invokeMethod<bool>(method, args) ?? false;

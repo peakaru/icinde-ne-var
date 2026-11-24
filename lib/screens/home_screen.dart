@@ -22,6 +22,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _barcodeController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
+  // Sonuçlar gelince arama alanı ekranın üstüne kaydırılır; yoksa klavye
+  // açıkken sonuçlar klavyenin arkasında kalıp görünmüyordu
+  final GlobalKey _searchAreaKey = GlobalKey();
   bool _loading = false;
   String _lang = 'tr';
 
@@ -141,6 +144,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           if (_wakeVisible == id) _wakeVisible = null;
           if (_wakeWanted == id) _wakeWanted = null;
         });
+  }
+
+  void _revealSearchResults() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _searchAreaKey.currentContext;
+      if (ctx == null || !mounted) return;
+      Scrollable.ensureVisible(ctx,
+          alignment: 0.0, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    });
   }
 
   Future<void> _openUpdate() async {
@@ -306,7 +318,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final wait = _beginWait();
     try {
       final results = await SearchService.search(query, limit: 8);
-      if (isCurrent()) setState(() => _searchResults = results);
+      if (isCurrent()) {
+        setState(() => _searchResults = results);
+        if (results.isNotEmpty) _revealSearchResults();
+      }
     } on RateLimitException {
       if (mounted && seq == _searchSeq) {
         setState(() => _searchResults = []);
@@ -470,6 +485,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
+    // Klavye açıkken alttaki imza satırı gizlenir; sonuçlara yer kalsın
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -688,6 +705,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
                           // ── Akıllı Arama (barkod VEYA isim) ─────
                           Column(
+                            key: _searchAreaKey,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
@@ -832,8 +850,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ),
                   ),
 
-                  // ── Footer (her zaman altta) ──────────────────
-                  Padding(
+                  // ── Footer (altta; klavye açıkken gizli) ────────
+                  if (!keyboardOpen) Padding(
                     padding: EdgeInsets.only(bottom: bottomPad + 16, top: 8),
                     child: AnimatedBuilder(
                       animation: _pulseController,

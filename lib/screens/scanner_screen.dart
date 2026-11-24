@@ -78,8 +78,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
     final barcode = capture.barcodes.firstOrNull?.rawValue;
     if (barcode != null) {
       _scanned = true;
-      // Okunduğu hissedilsin (titreşim izni gerektirmez)
-      HapticFeedback.mediumImpact();
+      // Okunduğu hissedilsin. HapticFeedback sistemin dokunma geri bildirimi
+      // ayarına bağlı ve çoğu telefonda hissedilmiyor; titreşim motoru doğrudan
+      SystemService.vibrate().then((ok) {
+        if (!ok) HapticFeedback.mediumImpact();
+      });
       _controller.stop();
       Navigator.pop(context, barcode);
     }
