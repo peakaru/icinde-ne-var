@@ -434,6 +434,44 @@ _PLAIN_WATER = re.compile(r"\b(?:su|suyu|water|eau|wasser|agua|acqua|soda|maden 
                           r"mineral water|eau minerale|mineralwasser)\b")
 _FLAVOURED = re.compile(r"aroma|flavo|meyveli|vitamin|tropical|tropik|nane|mint\b|"
                         r"\bmit\b|\bavec\b|gusto|sabor|\bplus\b|enhancer|electrolyte")
+# Adında su/water/soda geçip su olmayanlar: gazoz/tonik (OFF da su saymaz), hindistan
+# cevizi suyu, kozmetik (misel suyu, gül suyu), şekerleme ("salt water taffy"), konserve
+# ("tuna in water"), kabartma sodası
+_NOT_WATER = re.compile(
+    r"\b(?:sodas?|tonik|tonic|tonica|tonico|tonique|cola|coco|coconut|kokos|hindistan|"
+    r"protein|kefir|micellar|misel|rose|gul|taffy|candy|cream|krem|juice|drinks?|"
+    r"tuna|atun|thon|tonno|baking|bicarbonate|karbonat|energy|enerji|prebiotic|"
+    r"infused|infusion|cucumber|salatalik|yuzu|berry|citrus|ginger|zencefil|tangerine|"
+    r"vanilla|vanilya|lychee|watermelon|karpuz|collagen|kolajen|hops|kewra|orge|barley|"
+    r"gripe|taffy|tafy|chestnuts?|lily|alus|micelar|colou?r|boya|plasti[ck]|"
+    # gıda olmayan "su"lu ürünler (sıcak su torbası, su bazlı losyon, ağız suyu ...)
+    r"sicak|torba|torbasi|termos|mop|pompa|pompasi|tabanca|bazli|losyon|agiz|makyaj|"
+    r"temizleme|aerosol|sprey|spray|toilet|toiletblok|softener|yumusatici|"
+    r"hipertonica|mar)\b")
+# Besin tablosu olmayan su ancak adı açıkça sade su ise A alır (marketler sade suya çoğu
+# zaman besin tablosu koymuyor)
+_CLEAR_WATER = re.compile(
+    r"\b(?:maden|kaynak|icme|memba|mineralli|ambalajli|dogal) su(?:yu)?\b|\bpure life\b|"
+    r"\bagua\b.*\bmanantial\b|"
+    r"\b(?:mineral|mineraal|spring|natural|purified|drinking|table|still|sparkling|artesian|"
+    r"distilled|alkaline|glacier|mountain|bottled|pure|carbonated) water\b|"
+    r"\beau (?:minerale?|mineralle|de source|de table|plate|gazeuse|petillante|de montagne)\b|"
+    r"\b(?:mineral|tafel|quell)wasser\b|"
+    r"\bagua (?:mineral|mineralizada|de mesa|con gas|sin gas|pura|purificada|de nascente|"
+    r"natural)\b|"
+    r"\bacqua (?:minerale|naturale|frizzante|oligominerale|effervescente)\b")
+_WATER_WORDS = {"su", "suyu", "water", "eau", "wasser", "agua", "acqua"}
+_PACK_WORDS = {"l", "lt", "ml", "cl", "x", "litre", "liter", "pet", "sise", "cam", "damacana",
+               "paket", "paketi", "pack", "bottle", "adet", "koli", "li", "lu", "lik"}
+
+
+def _clearly_water(s: str) -> bool:
+    """Ad, marka ve ambalaj dışında yalnız 'su' diyor mu ("Damla Su 1,5 L", "Fiji Water")."""
+    if _CLEAR_WATER.search(s):
+        return True
+    words = [w for w in re.findall(r"[a-z]+", s)
+             if len(w) > 1 and w not in _WATER_WORDS and w not in _PACK_WORDS]
+    return len(words) <= 2
 # OFF'ta Nutri-Score hesaplanmayan gruplar: alkollü içecekler, bebek gıdaları,
 # sakız, katkı maddeleri, takviyeler, öğün yerine geçenler, tuz, baharat,
 # tatlandırıcı, sirke
@@ -569,8 +607,14 @@ def nutri_category(name: str, n: Optional[Nutrients] = None,
                 return cat
     if cat.beverage and n is not None and not sweeteners:
         if (_PLAIN_WATER.search(s) and not _FLAVOURED.search(s) and not _FVL_WORD_RE.search(s)
-                and (energy or 0) <= 1 and (n.sugars or 0) <= 0.1):
-            cat.water = True
+                and not _NOT_WATER.search(s) and (n.sugars or 0) <= 0.1):
+            if energy is not None:
+                cat.water = energy <= 1
+            else:
+                # Su notu (A) eksik veri kontrolünden önce verilir: enerjisi bilinmeyen
+                # üründe yalnız adı açıkça sade su olan ve bilinen makroları ~0 olan
+                cat.water = (_clearly_water(s) and max(n.proteins or 0, n.fat or 0,
+                                                        n.saturated_fat or 0) <= 0.5)
     if not cat.beverage:
         if _CHEESE.search(s) and not _NOT_CHEESE.search(s):
             cat.cheese = True

@@ -305,6 +305,22 @@ class CategoryTest(unittest.TestCase):
         self.assertTrue(self.cat("Doğal Maden Suyu", **n).water)
         self.assertFalse(self.cat("Limonlu Maden Suyu", **n).water)
         self.assertFalse(self.cat("Cherry Sparkling Water", **n).water)
+        # Su değil: gazoz/soda (OFF da su saymaz), kozmetik
+        self.assertFalse(self.cat("Club Soda", **n).water)
+        self.assertFalse(self.cat("Micellar Water", **n).water)
+        # Besin tablosu yok: yalnız adı açıkça sade su olan su sayılır
+        bos = Nutrients()
+        for name in ("Kınık Sade Maden Suyu", "Damla Su 1,5 Lt", "Fiji Water",
+                     "Agua mineral natural con gas", "Nestle Pure Life Su 5 Lt",
+                     "Damla Minera Mineralli Su Cam 6x200 ml", "Badem Pınarı Su 12'li 12*330 ml",
+                     "Agua De Mesa Cielo Con Gas x 625Ml",
+                     "St Amand Eau Minérale Naturelle 75cl Bouchon Sport"):
+            self.assertTrue(nutri_category(name, bos).water, name)
+        for name in ("Haribo Soda straws", "Coconut Water", "Siblou white tuna with water",
+                     "Tepamoji varškė su žalumynais", "Protein Water Citrus Crush",
+                     "Mil976 Tonic Water Ocean", "Vichy Sıcak Su Torbası 2 L",
+                     "Knorr Et Suyu Tableti", "İlikli Dana Kemik Suyu", "Salt Water Taffy Chews"):
+            self.assertFalse(nutri_category(name, bos).water, name)
 
     def test_red_meat(self):
         self.assertTrue(self.cat("Dana Sucuk").red_meat)
@@ -331,6 +347,12 @@ class NutriScoreTest(unittest.TestCase):
     def test_water_is_a(self):
         n = Nutrients(energy_kcal=0, sugars=0, saturated_fat=0, sodium_mg=12, proteins=0)
         self.assertEqual(evaluate_nutri_score("Maden Suyu", n).grade, "A")
+
+    def test_water_without_nutrients_is_not_graded(self):
+        for name in ("Haribo Soda straws", "Siblou white tuna with water", "Coconut Water"):
+            r = evaluate_nutri_score(name, Nutrients())
+            self.assertEqual((r.grade, r.unavailable_reason), (None, "missing"), name)
+        self.assertEqual(evaluate_nutri_score("Kınık Sade Maden Suyu", Nutrients()).grade, "A")
 
     def test_orange_juice_counts_fruit(self):
         # 100% portakal suyu: OFF c (5). Meyve sayılmasa E (11) çıkardı.
