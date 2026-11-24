@@ -20,6 +20,8 @@ from analysis import (
     Nutrients,
     analyze_ingredients,
     allergen_info,
+    allergen_marks,
+    split_ingredient_list,
     evaluate_nutri_score,
     is_beverage,
     normalize_sodium_mg,
@@ -355,8 +357,13 @@ def get_product_from_db(barcode: str):
     if not conn:
         return None
     try:
+        # Aynı barkod birden çok satırdaysa aramayla aynı satır seçilir (içerik
+        # metni en uzun olan); arama listesindeki not ile ürün sayfası uyuşsun.
         result = conn.execute(
-            "SELECT * FROM products WHERE code = ?", [barcode]
+            "SELECT * FROM products WHERE code = ? "
+            "ORDER BY length(coalesce(ingredients_text, '')) DESC, "
+            "length(coalesce(product_name, '')) ASC, product_name LIMIT 1",
+            [barcode]
         ).fetchone()
         if result:
             # Kolon adlarını al
@@ -516,8 +523,19 @@ def search_products(q: str, limit: int = 10):
                 params + [f"{words[0]}%", limit],
             ).fetchall()
 
+        def _grade_on_open(row: dict) -> bool:
+            # Barkod sorgusu bu ürün için Open Food Facts'e de bakar (yerelde
+            # içerik ya da enerji yoksa); not o zaman OFF verisiyle değişebilir.
+            # Listede yerel veriden not göstermek ürün sayfasıyla çelişebilir.
+            code = row.get("code") or ""
+            if _LOCAL_ID.fullmatch(code):
+                return False
+            return not row.get("ingredients_text") or not row.get("energy-kcal_100g")
+
         def _grade_for(row: dict):
             # Barkod sorgusuyla aynı hesap; eksik/tutarsız veride None
+            if _grade_on_open(row):
+                return None
             try:
                 n = _local_nutrients(row)
                 return evaluate_nutri_score(row.get("product_name") or "", n,
@@ -543,6 +561,7 @@ def search_products(q: str, limit: int = 10):
                 "product_name": row["product_name"] or "",
                 "brand": row["brands"] or "",
                 "nutriscore": _grade_for(row),
+                "grade_on_open": _grade_on_open(row),
             })
 
         # Benzer-ürün tekilleştirme: OFF'ta aynı ürün farklı ülkelerden
@@ -840,8 +859,11 @@ async def lookup_barcode(code: str, request: Request = None):
     allergens, allergen_traces = allergen_info(all_ingredients if has_text else name,
                                                off_product)
 
-    # İçerik listesi parse
-    ingredient_list = [i.strip() for i in re.split(r'[,;]', all_ingredients) if i.strip()]
+    # İçerik listesi: yalnızca parantez dışındaki virgüllerden bölünür ("%9,5"
+    # ve "yağlar (palm, palm çekirdeği)" tek parça). Uygulama parçaları ", " ile
+    # birleştirip gösterir; alerjen aralıkları o birleşik metne göredir.
+    ingredient_list = split_ingredient_list(all_ingredients)
+    ingredient_marks = allergen_marks(", ".join(ingredient_list))
 
     return {
         "barcode": code,
@@ -854,6 +876,7 @@ async def lookup_barcode(code: str, request: Request = None):
         "allergens": allergens,
         "allergen_traces": allergen_traces,
         "all_ingredients": ingredient_list,
+        "ingredient_allergen_marks": ingredient_marks,
         "source": source,
         # Porsiyon/paket bilgisi (UI toggle için)
         "product_quantity": product_quantity,

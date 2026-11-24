@@ -8,8 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from analysis import (  # noqa: E402
     NutriCategory,
     Nutrients,
+    _allergen_text,
+    _allergen_text_mapped,
     _tr_norm,
     allergen_info,
+    allergen_marks,
     allergens_from_off_tags,
     analyze_ingredients,
     compute_nutri_score,
@@ -23,6 +26,7 @@ from analysis import (  # noqa: E402
     normalize_sodium_mg,
     nutri_category,
     nutri_score_from_off,
+    split_ingredient_list,
 )
 
 
@@ -426,6 +430,50 @@ class NutriScoreTest(unittest.TestCase):
         self.assertEqual(r.breakdown["proteins"]["points"], -7)
         self.assertIsNone(nutri_score_from_off({"nutriscore": {"2023": {"grade": "unknown"}}},
                                                Nutrients()))
+
+
+class IngredientListTest(unittest.TestCase):
+    ULKER = ("Şeker, buğday unu, bitkisel yağlar (palm, palm çekirdeği), fındık püresi (%9,5), "
+             "tam yağlı süttozu, emülgatörler (soya lesitini, poligliserol polirisinoleat); tuz")
+
+    def test_split_keeps_parentheses_and_decimal_commas(self):
+        self.assertEqual(split_ingredient_list(self.ULKER), [
+            "Şeker", "buğday unu", "bitkisel yağlar (palm, palm çekirdeği)",
+            "fındık püresi (%9,5)", "tam yağlı süttozu",
+            "emülgatörler (soya lesitini, poligliserol polirisinoleat)", "tuz"])
+        self.assertEqual(split_ingredient_list("şeker %9,5 ,  kakao,, su"),
+                         ["şeker %9,5", "kakao", "su"])
+        self.assertEqual(split_ingredient_list("un (buğday, su"), ["un (buğday, su"])
+        self.assertEqual(split_ingredient_list(""), [])
+        self.assertEqual(split_ingredient_list(None), [])
+
+    def test_compound_milk_powder_is_milk(self):
+        self.assertEqual(detect_allergens("şeker, yağsız süttozu"), ["süt"])
+
+    def test_mapped_text_matches_detector_text(self):
+        for text in (self.ULKER, "Glutensiz yulaf, hindistan cevizi sütü, E 322, PEYNİR",
+                     "badem sütü, _süt_ tozu, Weizenmehl, Straße, Tintenfisch",
+                     "amonyum sülfit karamel, İnek sütü, sütsüz"):
+            t, spans = _allergen_text_mapped(text)
+            self.assertEqual(t, _allergen_text(text))
+            self.assertEqual(len(spans), len(t))
+
+    def marked(self, text):
+        return [text[a:b] for a, b in allergen_marks(text)]
+
+    def test_marks_whole_allergen_words(self):
+        self.assertEqual(self.marked(self.ULKER),
+                         ["buğday", "fındık", "süttozu", "soya"])
+        self.assertEqual(self.marked("Alerjen: BUĞDAY, FINDIK ve SÜT içerir."),
+                         ["BUĞDAY", "FINDIK", "SÜT"])
+        self.assertEqual(self.marked("peyniraltı suyu tozu (süt), inek sütü"),
+                         ["peyniraltı", "süt", "sütü"])
+
+    def test_marks_skip_negations_and_lookalikes(self):
+        self.assertEqual(self.marked("glutensiz yulaf, sütsüz, hindistan cevizi sütü, "
+                                     "pirinç unu, kakao yağı, cocoa butter"), [])
+        # Bitkisel sütte bitki alerjendir, "süt" kelimesi değil
+        self.assertEqual(self.marked("badem sütü"), ["badem"])
 
 
 class HelperTest(unittest.TestCase):

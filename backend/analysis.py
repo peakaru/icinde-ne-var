@@ -28,7 +28,7 @@ def fold_i(text: str) -> str:
 # etiket var; yaygın karşılıklar da listede. 4 karakter ve altı keyword'ler
 # kelime sınırıyla, uzunlar alt-dizgi olarak aranır (bkz. detect_allergens).
 ALLERGENS = {
-    "süt": ["süt", "laktoz", "peynir", "kaşar", "tereyağ", "kaymak", "krema",
+    "süt": ["süt", "süttoz", "laktoz", "peynir", "kaşar", "tereyağ", "kaymak", "krema",
             "yoğurt", "ayran", "kefir", "labne", "kazein",
             "milk", "cream", "whey", "butter", "cheese", "lactose", "casein",
             "yoghurt", "ghee",
@@ -1064,6 +1064,113 @@ def detect_allergens(text: str) -> List[str]:
     """
     contains, traces = detect_allergens_detailed(text)
     return merge_allergens(contains, traces)
+
+
+def split_ingredient_list(text: str) -> List[str]:
+    """İçindekiler metnini üst düzey bileşenlere böler (uygulamada gösterim için).
+
+    Yalnızca parantez dışındaki virgül ve noktalı virgüllerden bölünür; ondalık
+    virgül ("%9,5") bölünmez. Parçalar ", " ile birleştirilince metin aynen
+    (ayırıcıdan sonraki boşluklar dışında) geri gelir."""
+    t = text or ""
+    out, buf, depth = [], [], 0
+    for i, ch in enumerate(t):
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth = max(0, depth - 1)
+        elif ch in ",;" and depth == 0 and not (
+                ch == "," and 0 < i < len(t) - 1 and t[i - 1].isdigit() and t[i + 1].isdigit()):
+            part = "".join(buf).strip()
+            if part:
+                out.append(part)
+            buf = []
+            continue
+        buf.append(ch)
+    part = "".join(buf).strip()
+    if part:
+        out.append(part)
+    return out
+
+
+_GROUP_REF = re.compile(r"\\(\d)")
+
+
+def _sub_mapped(rx, repl: str, t: str, spans: List[Tuple[int, int]]):
+    """rx.sub(repl, t) ile aynı metni üretir; her karakterin orijinal metindeki
+    [başlangıç, bitiş) aralığını da taşır. Gruptan gelen karakterler kendi
+    yerini, sabit metin ise eşleşmenin tamamını gösterir."""
+    pieces = _GROUP_REF.split(repl)
+    out, out_spans, pos = [], [], 0
+    for m in rx.finditer(t):
+        if m.end() == m.start():
+            continue
+        out.append(t[pos:m.start()])
+        out_spans.extend(spans[pos:m.start()])
+        lo = min(s for s, _ in spans[m.start():m.end()])
+        hi = max(e for _, e in spans[m.start():m.end()])
+        for k, piece in enumerate(pieces):
+            if k % 2 == 0:
+                out.append(piece)
+                out_spans.extend([(lo, hi)] * len(piece))
+            elif m.group(int(piece)) is not None:
+                g = int(piece)
+                out.append(m.group(g))
+                out_spans.extend(spans[m.start(g):m.end(g)])
+        pos = m.end()
+    out.append(t[pos:])
+    out_spans.extend(spans[pos:])
+    return "".join(out), out_spans
+
+
+def _allergen_text_mapped(text: str):
+    """_allergen_text ile aynı metin + her karakterin orijinal konumu."""
+    chars, spans = [], []
+    for i, ch in enumerate(text or ""):
+        for c in _fold_ascii(ch):
+            chars.append(c)
+            spans.append((i, i + 1))
+    t = re.sub(r"[_*]", " ", "".join(chars))
+    t, spans = _sub_mapped(_E_NUMBER_SPACE, r"e\1", t, spans)
+    for rx, replacement in _NON_ALLERGEN_SUBS:
+        t, spans = _sub_mapped(rx, replacement, t, spans)
+    return t, spans
+
+
+def allergen_marks(text: str) -> List[List[int]]:
+    """İçerik metninde alerjen geçen kelimelerin [başlangıç, bitiş) aralıkları
+    (verilen metne göre), ambalajlardaki gibi kalın göstermek için.
+
+    Alerjen tespitiyle aynı kalıplar kullanılır: yokluk bildiren kullanımlar
+    ("glutensiz", "süt içermez") ve alerjen sayılmayanlar ("hindistan cevizi
+    sütü", "pirinç unu") işaretlenmez. Eşleşme kelimenin tamamına genişletilir
+    ("süttozu", "fındıklı")."""
+    src = text or ""
+    t, spans = _allergen_text_mapped(src)
+    found = []
+    for _allergen, patterns in _ALLERGEN_PATTERNS:
+        for rx, exclude_before in patterns:
+            for m in rx.finditer(t):
+                if (m.end() == m.start()
+                        or _NEGATION_AFTER.match(t, m.end())
+                        or _NEGATION_BEFORE.search(t[max(0, m.start() - 20):m.start()])
+                        or (exclude_before
+                            and exclude_before.search(t[max(0, m.start() - 30):m.start()]))):
+                    continue
+                lo = min(s for s, _ in spans[m.start():m.end()])
+                hi = max(e for _, e in spans[m.start():m.end()])
+                while lo > 0 and src[lo - 1].isalnum():
+                    lo -= 1
+                while hi < len(src) and src[hi].isalnum():
+                    hi += 1
+                found.append((lo, hi))
+    merged: List[List[int]] = []
+    for lo, hi in sorted(found):
+        if merged and lo <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return merged
 
 
 # Open Food Facts allergens_tags / traces_tags → uygulama anahtarları
