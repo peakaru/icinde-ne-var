@@ -384,7 +384,7 @@ class NutriCategory:
 # categories_considered_as_beverages_for_nutriscore_2023; Food.pm). OFF ürünün
 # kategori etiketlerini kullanır; bizim veri setimizde yalnızca ad var.
 _DRINK_STRONG = re.compile(
-    r"\b(?:su|suyu|sulari|soda|gazoz|kola|cola|ayran|kefir|limonata|lemonade|"
+    r"\b(?:su|suyu|sulari|soda|gazoz|gazozu|kola|cola|ayran|kefir|limonata|lemonade|"
     r"juice|juices|nektar|nectar|smoothie|drink|drinks|icecek|icecegi|beverage|"
     r"ice ?tea|buzlu cay|soguk cay|milkshake|boisson|getrank|saft|jus|bebida|"
     r"bevanda|zumo|succo|water|eau|wasser|agua|acqua|salgam|boza|kombucha|salep|"
@@ -491,6 +491,7 @@ _FATS_NUTS = re.compile(
     r"zeytinyagi|zeytin yagi|aycicek yagi|aycicegi yagi|misirozu yagi|kanola yagi|"
     r"findik yagi|susam yagi|tereyagi|tereyag\b|margarin|\boil\b|olive oil|huile|"
     r"\bol\b|olivenol|\bbutter\b|\bbeurre\b|mantequilla|\bburro\b|ghee|sade yag|"
+    r"\bkuruyemis\b|"   # "Karışık Kuruyemiş" (kuruyemişli bar/granola dışarıda kalır)
     r"\bfindik\b|findigi|\bbadem\b|bademi|\bceviz\b|cevizi|\bfistik\b|fistigi|\bkaju\b|"
     r"cekirdegi|cekirdek ici|\bnuts?\b|almonds?\b|walnuts?\b|hazelnuts?\b|peanuts?\b|"
     r"cashews?\b|pistachios?\b|pecans?\b|macadamia|\bseeds?\b|graines|\btahin|"
@@ -499,6 +500,10 @@ _FATS_NUTS = re.compile(
     r"\bkrema\b|\bkremasi\b|\bkaymak\b|\bcream\b|creme fraiche|creme (?:epaisse|liquide|"
     r"entiere|legere|fleurette)|\bsahne\b|schlagsahne|\bnata\b|\bpanna\b")
 _NOT_FATS_NUTS = re.compile(
+    # "Antep fıstığı aromalı mısır çerezi": fıstık ürünün kendisi değil, tadı
+    # ("tütsü aromalı karışık kuruyemiş" ise kuruyemiştir, eşleşmez)
+    r"(?:findik\w*|badem\w*|ceviz\w*|fistig?\w*|kaju|tahin\w*|krema\w*|kaymak\w*|"
+    r"tereyag\w*|butter|cream) (?:aromali|aromasi)|"
     r"cikolata|chocolat|\bchoco|kakao|cocoa|gofret|wafer|kestane|chestnut|chataigne|marron|"
     r"petit beurre|financier|gateau|madeleine|croissant|patisserie|pastry|\bsable|galette|"
     r"buchette|brioche|\bpie\b|\btart|muffin|brownie|"
@@ -512,6 +517,24 @@ _NOT_FATS_NUTS = re.compile(
     r"karamel|caramel|vanilla|vanilya|sekerli|santi|liqueur|likor|filled|dolgulu|"
     r"cracker|kraker|pasta kremasi|a l'?\s?huile|in (?:olive |sunflower )?oil|\bthon\b|"
     r"\btonno\b|toffee|honey roasted|kaplamali|coated|enrobe|candied|praline|pralin")
+
+
+def _fat_dominant(n: Optional[Nutrients], s: str = "") -> bool:
+    """Yağ/kuruyemiş/tohum grubu enerjisinin çoğu yağdan gelen ürünler içindir
+    (kuruyemiş ~%75, tohum %55+, ezme, sıvı yağ, tereyağı, krema %85+). Adında
+    fındık/badem/krema geçse de enerjisi şekerden ya da nişastadan gelen ürün (badem
+    aromalı gazoz, ceviz reçeli, fındıklı yoğurt kasesi, fıstıklı dondurma, tohumlu
+    pirinç patlağı) genel gruptadır. Değer yoksa ada güvenilir. Adı açıkça
+    "kuruyemiş" olan karışımda (leblebi, kaplamalı fıstık içerebilir) yağ oranı
+    düşük çıkabilir; o yalnız şeker sınırına bakar."""
+    if n is None or not n.energy_kcal or n.energy_kcal <= 0:
+        return True
+    e = n.energy_kcal
+    if n.sugars is not None and 4 * n.sugars > 0.3 * e:
+        return False
+    if n.fat is not None and 9 * n.fat < 0.45 * e and "kuruyemis" not in s:
+        return False
+    return True
 
 
 def nutri_category(name: str, n: Optional[Nutrients] = None,
@@ -551,7 +574,7 @@ def nutri_category(name: str, n: Optional[Nutrients] = None,
     if not cat.beverage:
         if _CHEESE.search(s) and not _NOT_CHEESE.search(s):
             cat.cheese = True
-        elif _FATS_NUTS.search(s) and not _NOT_FATS_NUTS.search(s):
+        elif _FATS_NUTS.search(s) and not _NOT_FATS_NUTS.search(s) and _fat_dominant(n, s):
             cat.fat_oil_nuts_seeds = True
         if _RED_MEAT.search(s) and not _NOT_RED_MEAT.search(s):
             cat.red_meat = True

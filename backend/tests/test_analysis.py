@@ -268,6 +268,27 @@ class CategoryTest(unittest.TestCase):
         self.assertFalse(self.cat("Kestane").fat_oil_nuts_seeds)
         self.assertFalse(self.cat("Ton Balığı Zeytinyağlı").fat_oil_nuts_seeds)
 
+    def test_nut_word_without_fat_dominance(self):
+        # Adında fındık/ceviz geçse de enerjisi şekerden/nişastadan gelen ürün genel grupta
+        self.assertFalse(self.cat("Probiyotik Bowl Ahududu Yulaf Ceviz", energy_kcal=79,
+                                  sugars=9.7, fat=1.2).fat_oil_nuts_seeds)
+        self.assertFalse(self.cat("Magnum Crack Badem", energy_kcal=352, sugars=30,
+                                  fat=22).fat_oil_nuts_seeds)
+        self.assertFalse(self.cat("Ceviz Reçeli", energy_kcal=299, sugars=55).fat_oil_nuts_seeds)
+        self.assertFalse(self.cat("Sürülebilir Fındık Ezmesi", energy_kcal=555, sugars=57,
+                                  fat=34).fat_oil_nuts_seeds)
+        self.assertFalse(self.cat("Antep Fıstığı Aromalı Mısır Çerez").fat_oil_nuts_seeds)
+        # Gerçek yağ/kuruyemiş ürünleri grupta kalır
+        self.assertTrue(self.cat("Sade Fıstık Ezmesi", energy_kcal=554, sugars=4.5,
+                                 fat=34.3).fat_oil_nuts_seeds)
+        self.assertTrue(self.cat("Pişirme Kreması", energy_kcal=190, sugars=3,
+                                 fat=18).fat_oil_nuts_seeds)
+        self.assertTrue(self.cat("Tütsü Aromalı Karışık Kuruyemiş", energy_kcal=550, sugars=8.8,
+                                 fat=26.1).fat_oil_nuts_seeds)
+
+    def test_gazoz_is_beverage(self):
+        self.assertTrue(self.cat("Limon Aromalı Datça Gazozu 200 Ml", energy_kcal=38).beverage)
+
     def test_not_applicable(self):
         for name in ("Efes Pilsen Bira", "Sofra Tuzu", "Karabiber", "Elma Sirkesi",
                      "Multivitamin Efervesan Tablet", "Bebek Maması"):
